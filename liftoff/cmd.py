@@ -5,4 +5,5 @@ def launch():
 
 
 def generate():
-    raise NotImplementedError
+    from liftoff.prepare import main as _prepare
+    _prepare()
