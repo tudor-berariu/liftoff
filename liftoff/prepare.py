@@ -14,11 +14,14 @@ def get_args() -> Namespace:
     arg_parser.add_argument("-f", "--force", action="store_true",
                             default=False, dest="force",
                             help="Delete other generated files if found.")
+    arg_parser.add_argument("-c", "--clean", action="store_true",
+                            default=False, dest="clean",
+                            help="Deletes generated files if found.")
 
     return arg_parser.parse_args()
 
 
-def get_paths(experiment: str, force: bool = False) -> Tuple[str, str]:
+def get_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
     assert os.path.isdir('configs'), "configs folder is missing"
     exp_path = os.path.join('configs', experiment)
     assert os.path.isdir(exp_path), f"{exp_path:s} folder is missing"
@@ -31,7 +34,7 @@ def get_paths(experiment: str, force: bool = False) -> Tuple[str, str]:
 
     for file_name in os.listdir(exp_path):
         if file_name.startswith(experiment) and file_name.endswith(".yaml"):
-            if force:
+            if clean:
                 os.remove(os.path.join(exp_path, file_name))
             else:
                 assert False,\
@@ -98,7 +101,11 @@ def combine_values(variables: List[List[str]],
 def main():
     args = get_args()
     experiment = args.experiment
-    exp_path, config_path = get_paths(experiment, args.force)
+    exp_path, config_path = get_paths(experiment, args.force or args.clean)
+
+    if args.clean:
+        print("Cleaned.")
+        return
 
     with open(config_path) as config_file:
         config_data = yaml.load(config_file, Loader=yaml.SafeLoader)
