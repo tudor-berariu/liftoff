@@ -63,15 +63,24 @@ def parse_args(strict: bool = True) -> Namespace:
     arg_parser.add_argument(
         '-d', '--default_config_fle',
         default='default',
+        type=str,
         dest='default_config_file',
         help='Default configuration file'
     )
     arg_parser.add_argument(
         '-c', '--config_file',
         default=['default'],
+        type=str,
         nargs="+",
         dest='config_files',
         help='Configuration file.'
+    )
+    arg_parser.add_argument(
+        '--configs_dir',
+        type=str,
+        default='./configs',
+        dest='configs_dir',
+        help='Folder to search for config files.'
     )
     arg_parser.add_argument(
         '-e', '--experiment',
@@ -125,19 +134,18 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
     import os.path
 
     args = parse_args(strict=strict)
-
-    print(args)
+    print(config_to_string(args))
 
     if args.experiment:
         from os import listdir
-        path = f"./configs/{args.experiment:s}/"
+        path = os.path.join(args.configs_dir, args.experiment)
         config_files = [f for f in listdir(path)
                         if f.startswith(args.experiment + "_")
                         and f.endswith(".yaml")]
         default_config_file = "default.yaml"
         print(f"Found {len(config_files):d} configs in current experiment!")
     else:
-        path = f"./configs/"
+        path = args.configs_dir
         config_files = [f + ".yaml" for f in args.config_files]
         default_config_file = args.default_config_file + ".yaml"
 

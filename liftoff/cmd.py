@@ -4,6 +4,6 @@ def launch():
     _launch()
 
 
-def generate():
+def prepare():
     from liftoff.prepare import main as _prepare
     _prepare()

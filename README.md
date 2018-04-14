@@ -43,6 +43,51 @@
     liftoff module.function --procs-no n --experiment <experiment_name>
 
 
+### Scripts to be run ###
+
+Your typical script should have two functions: one that reads
+experiment configuration from disk (`main`) and one that takes a
+Namespace (`run`).
+
+
+    def run(args: Args) -> None:
+        ...
+    
+    
+    def main():
+    
+        # Reading args
+		from liftoff.config import read_config
+        args = read_config()  # type: Args
+    
+        if not hasattr(args, "out_dir"):
+            from time import time
+            if not os.path.isdir('./results'):
+                os.mkdir('./results')
+            out_dir = f'./results/{str(int(time())):s}_{args.experiment:s}'
+            os.mkdir(out_dir)
+            args.out_dir = out_dir
+        else:
+            assert os.path.isdir(args.out_dir), "Given directory does not exist"
+    
+        if not hasattr(args, "run_id"):
+            args.run_id = 0
+    
+        run(args)
+    
+    
+    if __name__ == "__main__":
+        main()
+    
+
+
+
 #### Example ####
+
+
+
+
+
+
 
 See [this project](https://github.com/tudor-berariu/lifelong-learning)

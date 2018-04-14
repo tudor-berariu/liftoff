@@ -1,24 +1,31 @@
 from argparse import ArgumentParser, Namespace
-from typing import Callable
+from typing import List, Union
 from copy import deepcopy
 import os
 import re
 from importlib import import_module
-from time import time
 import multiprocessing
 import multiprocessing.pool
+import time
+import subprocess
 import yaml
+from termcolor import colored as clr
+
+from .config import read_config, namespace_to_dict, config_to_string
+
+Args = Namespace
+PID = int
+MaybeInt = Union[int, None]
 
 
-from .config import read_config, namespace_to_dict
+def parse_args() -> Args:
+    """If you need GPU magic, please use detached processes."""
 
-
-def parse_args() -> Namespace:
     arg_parser = ArgumentParser()
     arg_parser.add_argument(
-        "function",
-        default="learn.main",
-        help="Module and function to be called for each experiment")
+        "module",
+        default="learn.py",
+        help="Module where to call `run(args)` from.")
     arg_parser.add_argument(
         '--resume',
         default=False,
@@ -31,80 +38,34 @@ def parse_args() -> Namespace:
         type=int,
         dest="procs_no",
         help="Number of concurrent processes.")
+    arg_parser.add_argument(
+        "-g", "--gpus",
+        default=[],
+        type=int,
+        nargs="*",
+        dest="gpus",
+        help="GPUs to distribute processes to.")
+    arg_parser.add_argument(
+        "--experiments-per-gpu",
+        default=0,
+        type=int,
+        dest="experiments_per_gpu",
+        help="Visible GPUs.")
+    arg_parser.add_argument(
+        "--no-detach",
+        default=False,
+        action="store_true",
+        dest="no_detach",
+        help="do not detach; spawn processes from python")
 
     return arg_parser.parse_known_args()[0]
 
 
-def get_function(full_name: str) -> Callable:
-    import sys
-    sys.path.append(os.getcwd())
-    if '.' in full_name:
-        parts = full_name.split('.')
-        module_name = '.'.join(parts[:-1])
-        function_name = parts[-1]
-    else:
-        module_name = full_name
-        function_name = "main"
-
-    module = import_module(module_name)
-    function = module.__dict__[function_name]
-
-    return function
-
-
-def main() -> None:
-    args = parse_args()
-    print(args)
-
-    # Figure out what should be executed
-    function = get_function(args.function)
-
-    # Read configuration files
-
-    cfgs = read_config(strict=False)
-    cfg0 = cfgs if not isinstance(cfgs, list) else cfgs[0]
-    cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
-
-    root_path = None
-    if args.resume:
-        experiment = cfg0.experiment
-        previous = [f for f in os.listdir("./results/")
-                    if re.match(f"\\d+_{experiment:s}", f)]
-        if previous:
-            last_time = str(max([int(f.split("_")[0]) for f in previous]))
-            print("Resuming", last_time, "!")
-            root_path = os.path.join("results",
-                                     f"{last_time:s}_{experiment:s}")
-            assert os.path.isdir(root_path)
-
-    if root_path is None:
-        root_path = f"results/{int(time()):d}_{cfg0.experiment:s}/"
-        assert not os.path.exists(root_path)
-        os.makedirs(root_path)
-
-    if len(cfgs) == 1 and cfgs[0].runs_no == 1:
-        cfg = cfgs[0]
-        # If there's a single experiment no subfolders are created
-
-        # Check if results file is already there (experiment is over)
-        results_file = os.path.join(root_path, "results.pkl")
-        if os.path.isfile(results_file):
-            print(f"Skipping {cfgs[0].title:s}. {results_file:s} exists.")
-            return
-
-        # Dump config file if there is none
-        cfg_file = os.path.join(root_path, "cfg.yaml")
-        if not os.path.isfile(cfg_file):
-            with open(cfg_file, "w") as yaml_file:
-                yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
-                               default_flow_style=False)
-        cfg.out_dir = root_path
-        cfg.run_id = 0
-        function(cfg)
-        return
+def get_exp_args(cfgs: List[Args], root_path: str) -> List[Args]:
+    """Takes the configs read from files and augments them with
+    out_dir, and run_id"""
 
     exp_args = []
-
     for j, cfg in enumerate(cfgs):
         title = cfg.title
         for char in " -.,=:;/()":
@@ -131,21 +92,48 @@ def main() -> None:
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = run_id
                 new_cfg.out_dir = exp_path
+                new_cfg.cfg_dir = alg_path
                 exp_args.append(new_cfg)
         else:
+            # if there's a single run, no individual folders are created
+
             results_file = os.path.join(alg_path, "results.pkl")
             if os.path.isfile(results_file):
                 print(f"Skipping {cfg.title:s}. {results_file:s} exists.")
             else:
-                cfg.out_dir = alg_path
-                cfg.run_id = 0
+                new_cfg = deepcopy(cfg)
+                new_cfg.run_id = 0
+                new_cfg.out_dir = alg_path
+                new_cfg.cfg_dir = alg_path
                 exp_args.append(cfg)
 
-    """
-    Solution from here: https://stackoverflow.com/a/8963618/1478624
-    """
+    return exp_args
+
+
+# --------------------------------------------
+# Run experiments as locally spawned processes
+
+def get_function(args: Args) -> callable:
+    import sys
+    sys.path.append(os.getcwd())
+    module = import_module(args.module)
+    assert "run" in module.__dict__, "Module must have function run(args)."
+    return module.__dict__["run"]
+
+
+def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
+
+    # Figure out what should be executed
+    function = get_function(args)
+
+    assert not args.gpus, "Cannot specify GPUs unless you detach processes"
+    assert args.procs_no >= 1, f"Strange number of procs: {args.procs_no:d}"
 
     class NoDaemonProcess(multiprocessing.Process):
+        """
+        Solution from here: https://stackoverflow.com/a/8963618/1478624
+        """
+
         # make 'daemon' attribute always return False
         def _get_daemon(self):
             return False
@@ -158,8 +146,169 @@ def main() -> None:
     class MyPool(multiprocessing.pool.Pool):
         Process = NoDaemonProcess
 
+    exp_args = get_exp_args(cfgs, root_path)
+
     pool = MyPool(args.procs_no)
     pool.map(function, exp_args)
+
+
+# --------------------------------------------
+# Start and detach experiments using nohup
+
+def get_max_procs(args: Args) -> int:
+    """Limit the number of processes by either CPU usage or GPU usage"""
+    if args.gpus:
+        return min(args.procs_no, args.experiments_per_gpu * len(args.gpus))
+    return args.procs_no
+
+
+def launch(py_file: str, exp_args: Args, gpu: MaybeInt = None) -> PID:
+    err_path = os.path.join(exp_args.out_dir, "err")
+    out_path = os.path.join(exp_args.out_dir, "out")
+
+    cmd = f"OMP_NUM_THREADS=1 " +\
+          f"MKL_NUM_THREADS=1 " +\
+          f" nohup python {py_file:str}" +\
+          f" --configs_dir {exp_args.cfg_dir:s}" +\
+          f" --config_file cfg.yaml" +\
+          f" --default_config_file cfg.yaml" +\
+          f" --out_dir {exp_args.out_dir:s}" +\
+          f" 2>{err_path:s} 1>{out_path:}" +\
+          f" & echo $!"
+
+    if gpu:
+        cmd = "CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s]"
+
+    print("Command to be run:\n{cmd:s}")
+
+    proc = subprocess.Popen(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            shell=True)
+    (out, err) = proc.communicate()
+    err = err.decode("utf-8").strip()
+    if err:
+        print(f"Some error: {clr(err, 'red'):s}.")
+    pid = int(out.decode("utf-8").strip())
+    print(f"New PID is {pid:d}.")
+
+    return pid
+
+
+def get_command(pid: PID) -> str:
+    result = subprocess.run(f"ps -p {pid:d} -o cmd h",
+                            stdout=subprocess.PIPE,
+                            shell=True)
+    return result.stdout.decode("utf-8").strip()
+
+
+def still_active(pid: PID, py_file: str) -> bool:
+    cmd = get_command(pid)
+    return cmd and (py_file in cmd)
+
+
+def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
+    active_procs = []
+    max_procs_no = get_max_procs(args)
+    print("The maximum number of experiments in parallel will be: ",
+          max_procs_no)
+
+    gpus = args.gpus
+    epg = args.experiments_per_gpu
+    py_file = args.module
+    py_file = py_file + ".py" if py_file.endswith(".py") else py_file
+    assert os.path.isfile(py_file)
+
+    exp_args = get_exp_args(cfgs, root_path)
+
+    while exp_args:
+        if len(active_procs) < max_procs_no:
+            gpu = None
+            for gpu_j in gpus:
+                if len([_ for (_, _g) in active_procs if _g == gpu_j]) < epg:
+                    gpu = gpu_j
+                    break
+            next_args = exp_args.pop()
+            new_pid = launch(py_file, next_args, gpu=gpu)
+            active_procs.append((new_pid, gpu))
+        else:
+            time.sleep(1)
+
+        old_active_procs = active_procs
+        active_procs = []
+        for (pid, gpu) in old_active_procs:
+            if still_active(pid, py_file):
+                active_procs.append((pid, gpu))
+            else:
+                print(f"Process {pid:d} seems to be done.")
+
+    while active_procs:
+        active_procs = []
+        for (pid, gpu) in active_procs:
+            if still_active(pid, py_file):
+                active_procs.append((pid, gpu))
+            else:
+                print(f"Process {pid:d} seems to be done.")
+        print("Still active: " +
+              ",".join([str(pid) for (pid, _) in active_procs]) +
+              ". Stop this at any time with no risks.")
+
+        time.sleep(30)
+    print("All done!")
+
+
+def main():
+    args = parse_args()
+    print(config_to_string(args))
+
+    # Read configuration files
+
+    cfgs = read_config(strict=False)
+    cfg0 = cfgs if not isinstance(cfgs, list) else cfgs[0]
+    cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
+
+    root_path = None
+    if args.resume:
+        experiment = cfg0.experiment
+        previous = [f for f in os.listdir("./results/")
+                    if re.match(f"\\d+_{experiment:s}", f)]
+        if previous:
+            last_time = str(max([int(f.split("_")[0]) for f in previous]))
+            print("Resuming", last_time, "!")
+            root_path = os.path.join("results",
+                                     f"{last_time:s}_{experiment:s}")
+            assert os.path.isdir(root_path)
+
+    if root_path is None:
+        root_path = f"results/{int(time.time()):d}_{cfg0.experiment:s}/"
+        assert not os.path.exists(root_path)
+        os.makedirs(root_path)
+
+    if len(cfgs) == 1 and cfgs[0].runs_no == 1:
+        cfg = cfgs[0]
+        # If there's a single experiment no subfolders are created
+
+        # Check if results file is already there (experiment is over)
+        results_file = os.path.join(root_path, "results.pkl")
+        if os.path.isfile(results_file):
+            print(f"Skipping {cfgs[0].title:s}. {results_file:s} exists.")
+            return
+
+        # Dump config file if there is none
+        cfg_file = os.path.join(root_path, "cfg.yaml")
+        if not os.path.isfile(cfg_file):
+            with open(cfg_file, "w") as yaml_file:
+                yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
+                               default_flow_style=False)
+        cfg.out_dir = root_path
+        cfg.run_id = 0
+        get_function(args)(cfg)
+        return
+
+    if args.no_detach:
+        spawn_from_here(root_path, cfgs, args)
+    else:
+        run_from_system(root_path, cfgs, args)
 
 
 if __name__ == "__main__":

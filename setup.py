@@ -6,7 +6,7 @@ setup(name='liftoff',
       entry_points={
           'console_scripts': [
               'liftoff=liftoff.cmd:launch',
-              'liftoff-generate=liftoff.cmd:generate'
+              'liftoff-prepare=liftoff.cmd:prepare'
           ],
       },
       url='https://github.com/tudor-berariu/liftoff',
