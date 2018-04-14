@@ -61,14 +61,14 @@ def parse_args(strict: bool = True) -> Namespace:
 
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument(
-        '-d', '--default_config_fle',
+        '-d', '--default-config-file',
         default='default',
         type=str,
         dest='default_config_file',
         help='Default configuration file'
     )
     arg_parser.add_argument(
-        '-c', '--config_file',
+        '-c', '--config-file',
         default=['default'],
         type=str,
         nargs="+",
@@ -76,7 +76,7 @@ def parse_args(strict: bool = True) -> Namespace:
         help='Configuration file.'
     )
     arg_parser.add_argument(
-        '--configs_dir',
+        '--configs-dir',
         type=str,
         default='./configs',
         dest='configs_dir',
@@ -96,10 +96,9 @@ def parse_args(strict: bool = True) -> Namespace:
         dest="resume"
     )
     arg_parser.add_argument(
-        '--runs-no',
-        default=1,
-        type=int,
-        dest="runs_no"
+        '--out-dir',
+        type=str,
+        dest="out_dir"
     )
     if strict:
         return arg_parser.parse_args()
@@ -162,7 +161,7 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             _update_config(default_cfg, cfg)
             cfg = default_cfg
 
-        # Make sure experiment / title / resume / runs_no are set
+        # Make sure experiment / title / resume are set
 
         if not hasattr(cfg, "experiment"):
             if args.experiment:
@@ -173,8 +172,8 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             cfg.title = config_file[:-5]  # lose .yaml
 
         cfg.resume = args.resume
-        if not hasattr(cfg, "runs_no"):
-            cfg.runs_no = args.runs_no
+        if hasattr(args, "out_dir"):
+            cfg.out_dir = args.out_dir
 
         cfgs.append(cfg)
 

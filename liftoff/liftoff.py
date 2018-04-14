@@ -27,6 +27,12 @@ def parse_args() -> Args:
         default="learn.py",
         help="Module where to call `run(args)` from.")
     arg_parser.add_argument(
+        '--runs-no',
+        type=int,
+        default=1,
+        dest="runs_no"
+    )
+    arg_parser.add_argument(
         '--resume',
         default=False,
         action="store_true",
@@ -46,10 +52,10 @@ def parse_args() -> Args:
         dest="gpus",
         help="GPUs to distribute processes to.")
     arg_parser.add_argument(
-        "--experiments-per-gpu",
+        "--per-gpu",
         default=0,
         type=int,
-        dest="experiments_per_gpu",
+        dest="per_gpu",
         help="Visible GPUs.")
     arg_parser.add_argument(
         "--no-detach",
@@ -61,7 +67,7 @@ def parse_args() -> Args:
     return arg_parser.parse_known_args()[0]
 
 
-def get_exp_args(cfgs: List[Args], root_path: str) -> List[Args]:
+def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
     """Takes the configs read from files and augments them with
     out_dir, and run_id"""
 
@@ -78,8 +84,8 @@ def get_exp_args(cfgs: List[Args], root_path: str) -> List[Args]:
             with open(cfg_file, "w") as yaml_file:
                 yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
                                default_flow_style=False)
-        if cfg.runs_no > 1:
-            for run_id in range(cfg.runs_no):
+        if runs_no > 1:
+            for run_id in range(runs_no):
                 exp_path = os.path.join(alg_path, f"{run_id:d}")
                 if os.path.isdir(exp_path):
                     results_file = os.path.join(exp_path, "results.pkl")
@@ -105,7 +111,7 @@ def get_exp_args(cfgs: List[Args], root_path: str) -> List[Args]:
                 new_cfg.run_id = 0
                 new_cfg.out_dir = alg_path
                 new_cfg.cfg_dir = alg_path
-                exp_args.append(cfg)
+                exp_args.append(new_cfg)
 
     return exp_args
 
@@ -146,7 +152,7 @@ def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
     class MyPool(multiprocessing.pool.Pool):
         Process = NoDaemonProcess
 
-    exp_args = get_exp_args(cfgs, root_path)
+    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
 
     pool = MyPool(args.procs_no)
     pool.map(function, exp_args)
@@ -158,7 +164,7 @@ def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
 def get_max_procs(args: Args) -> int:
     """Limit the number of processes by either CPU usage or GPU usage"""
     if args.gpus:
-        return min(args.procs_no, args.experiments_per_gpu * len(args.gpus))
+        return min(args.procs_no, args.per_gpu * len(args.gpus))
     return args.procs_no
 
 
@@ -168,18 +174,18 @@ def launch(py_file: str, exp_args: Args, gpu: MaybeInt = None) -> PID:
 
     cmd = f"OMP_NUM_THREADS=1 " +\
           f"MKL_NUM_THREADS=1 " +\
-          f" nohup python {py_file:str}" +\
-          f" --configs_dir {exp_args.cfg_dir:s}" +\
-          f" --config_file cfg.yaml" +\
-          f" --default_config_file cfg.yaml" +\
-          f" --out_dir {exp_args.out_dir:s}" +\
-          f" 2>{err_path:s} 1>{out_path:}" +\
+          f" nohup python {py_file:s}" +\
+          f" --configs-dir {exp_args.cfg_dir:s}" +\
+          f" --config-file cfg" +\
+          f" --default-config-file cfg" +\
+          f" --out-dir {exp_args.out_dir:s}" +\
+          f" 2>{err_path:s} 1>{out_path:s}" +\
           f" & echo $!"
 
     if gpu:
         cmd = "CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s]"
 
-    print("Command to be run:\n{cmd:s}")
+    print(f"Command to be run:\n{cmd:s}")
 
     proc = subprocess.Popen(cmd,
                             stdout=subprocess.PIPE,
@@ -214,12 +220,12 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
           max_procs_no)
 
     gpus = args.gpus
-    epg = args.experiments_per_gpu
+    epg = args.per_gpu
     py_file = args.module
-    py_file = py_file + ".py" if py_file.endswith(".py") else py_file
+    py_file = py_file if py_file.endswith(".py") else py_file + ".py"
     assert os.path.isfile(py_file)
 
-    exp_args = get_exp_args(cfgs, root_path)
+    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
 
     while exp_args:
         if len(active_procs) < max_procs_no:
@@ -242,18 +248,21 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
             else:
                 print(f"Process {pid:d} seems to be done.")
 
+    wait_time = 1
     while active_procs:
+        time.sleep(wait_time)
+        wait_time = min(wait_time + 1, 30)
         active_procs = []
         for (pid, gpu) in active_procs:
             if still_active(pid, py_file):
                 active_procs.append((pid, gpu))
             else:
+                wait_time = 1
                 print(f"Process {pid:d} seems to be done.")
         print("Still active: " +
               ",".join([str(pid) for (pid, _) in active_procs]) +
               ". Stop this at any time with no risks.")
 
-        time.sleep(30)
     print("All done!")
 
 
@@ -284,7 +293,7 @@ def main():
         assert not os.path.exists(root_path)
         os.makedirs(root_path)
 
-    if len(cfgs) == 1 and cfgs[0].runs_no == 1:
+    if len(cfgs) == 1 and args.runs_no == 1:
         cfg = cfgs[0]
         # If there's a single experiment no subfolders are created
 
