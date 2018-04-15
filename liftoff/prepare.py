@@ -3,6 +3,8 @@ import itertools
 from argparse import ArgumentParser, Namespace
 from typing import List, Tuple
 import os.path
+from functools import reduce
+from operator import mul
 import yaml
 from termcolor import colored as clr
 
@@ -34,11 +36,11 @@ def get_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
 
     for file_name in os.listdir(exp_path):
         if file_name.startswith(experiment) and file_name.endswith(".yaml"):
+            f_path = os.path.join(exp_path, file_name)
             if clean:
-                os.remove(os.path.join(exp_path, file_name))
+                os.remove(f_path)
             else:
-                assert False,\
-                    "Found this file: {os.path.join(exp_path, f)}:s."
+                assert False, f"Found this file: {f_path:s}."
 
     return exp_path, config_path
 
@@ -118,6 +120,9 @@ def main():
     for name, domain in zip(names, domains):
         print(f"{len(domain):d} values for "
               f"{clr('.'.join(name), attrs=['bold']):s}")
+    total_no = reduce(mul, map(len, domains), 1)
+    print(f"{clr(f'{total_no:d} configurations', attrs=['bold']):s}"
+          f" will be created.")
 
     for idx, values in enumerate(itertools.product(*domains)):
         crt_values = combine_values(variables, values, names)

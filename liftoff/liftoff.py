@@ -11,11 +11,12 @@ import subprocess
 import yaml
 from termcolor import colored as clr
 
-from .config import read_config, namespace_to_dict, config_to_string
+from .config import read_config, namespace_to_dict, config_to_string, value_of
 
 Args = Namespace
 PID = int
 MaybeInt = Union[int, None]
+MaybeStr = Union[str, None]
 
 
 def parse_args() -> Args:
@@ -63,7 +64,11 @@ def parse_args() -> Args:
         action="store_true",
         dest="no_detach",
         help="do not detach; spawn processes from python")
-
+    arg_parser.add_argument(
+        "--env",
+        type=str,
+        dest="env",
+        help="Conda environment.")
     return arg_parser.parse_known_args()[0]
 
 
@@ -122,7 +127,10 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
 def get_function(args: Args) -> callable:
     import sys
     sys.path.append(os.getcwd())
-    module = import_module(args.module)
+    module_name = args.module
+    if module_name.endswith(".py"):
+        module_name = module_name[:-3]
+    module = import_module(module_name)
     assert "run" in module.__dict__, "Module must have function run(args)."
     return module.__dict__["run"]
 
@@ -168,7 +176,8 @@ def get_max_procs(args: Args) -> int:
     return args.procs_no
 
 
-def launch(py_file: str, exp_args: Args, gpu: MaybeInt = None) -> PID:
+def launch(py_file: str, exp_args: Args,
+           env: MaybeStr, gpu: MaybeInt = None) -> PID:
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
@@ -184,6 +193,9 @@ def launch(py_file: str, exp_args: Args, gpu: MaybeInt = None) -> PID:
 
     if gpu:
         cmd = "CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s]"
+
+    if env:
+        cmd = "source activate {env:s}; {cmd:s}"
 
     print(f"Command to be run:\n{cmd:s}")
 
@@ -226,6 +238,7 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
     assert os.path.isfile(py_file)
 
     exp_args = get_exp_args(cfgs, root_path, args.runs_no)
+    env = value_of(args, "env", None)
 
     while exp_args:
         if len(active_procs) < max_procs_no:
@@ -235,7 +248,7 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
                     gpu = gpu_j
                     break
             next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, gpu=gpu)
+            new_pid = launch(py_file, next_args, env, gpu=gpu)
             active_procs.append((new_pid, gpu))
         else:
             time.sleep(1)
