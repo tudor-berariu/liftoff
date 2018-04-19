@@ -1,12 +1,21 @@
 from copy import copy, deepcopy
-import itertools
+from itertools import product
 from argparse import ArgumentParser, Namespace
-from typing import List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, Union
 import os.path
-from functools import reduce
-from operator import mul
+from functools import partial
 import yaml
 from termcolor import colored as clr
+
+# Typing
+
+VarId = int
+VarPath = List[str]
+Variables = Dict[VarId, VarPath]
+Domain = List[Any]
+Domains = Dict[VarId, Domain]
+Assignment = Dict[VarId, Any]
+BadPairs = Dict[Tuple[VarId, VarId], List[Tuple[Any, Any]]]
 
 
 def get_args() -> Namespace:
@@ -23,20 +32,21 @@ def get_args() -> Namespace:
     return arg_parser.parse_args()
 
 
-def get_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
+def check_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
     assert os.path.isdir('configs'), "configs folder is missing"
-    exp_path = os.path.join('configs', experiment)
+    exp_path: str = os.path.join('configs', experiment)
     assert os.path.isdir(exp_path), f"{exp_path:s} folder is missing"
 
-    default_path = os.path.join(exp_path, 'default.yaml')
+    default_path: str = os.path.join(exp_path, 'default.yaml')
     assert os.path.isfile(default_path), f"{default_path:s} is missing"
 
-    config_path = os.path.join(exp_path, f"config.yaml")
+    config_path: str = os.path.join(exp_path, f"config.yaml")
     assert os.path.isfile(config_path), f"{config_path:s} is missing"
 
+    file_name: str
     for file_name in os.listdir(exp_path):
         if file_name.startswith(experiment) and file_name.endswith(".yaml"):
-            f_path = os.path.join(exp_path, file_name)
+            f_path: str = os.path.join(exp_path, file_name)
             if clean:
                 os.remove(f_path)
             else:
@@ -45,17 +55,36 @@ def get_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
     return exp_path, config_path
 
 
-def get_variables(config_data)-> Tuple[List[List[str]], List[List[object]]]:
+def to_var_path(val: Union[str, dict]) -> List[str]:
+    if isinstance(val, str):
+        return [val]
+    elif isinstance(val, dict):
+        assert len(val) == 1
+        return list(val.keys()) + to_var_path(list(val.values())[0])
+    raise ValueError
 
-    queue = [(config_data, [])]
-    variables, domains = [], []
+
+def get_variables(config_data: dict)-> Tuple[Variables, Domains, BadPairs]:
+
+    if "filter_out" in config_data:
+        filter_out = config_data["filter_out"]
+        del config_data["filter_out"]
+    else:
+        filter_out = []
+
+    queue: List[Tuple[Union[list, dict], VarPath]] = [(config_data, [])]
+
+    var_id: VarId = 0
+    variables: Dict[VarId, VarPath] = {}
+    domains: Dict[VarId, Domain] = {}
 
     while queue:
         node, parent = queue.pop()
         if isinstance(node, list):
-            # This means @parent is a variable wit multiple values
-            variables.append(copy(parent))
-            domains.append(deepcopy(node))
+            # This means @parent is a variable with multiple values
+            variables[var_id] = copy(parent)
+            domains[var_id] = deepcopy(node)
+            var_id += 1
         elif isinstance(node, dict):
             # We go deeper
             for name, value in node.items():
@@ -63,39 +92,73 @@ def get_variables(config_data)-> Tuple[List[List[str]], List[List[object]]]:
         else:
             assert False, "Something went wrong with " + str(node)
 
-    return variables, domains
+    bad_pairs: BadPairs = {}
+    for bad_pair in filter_out:
+        vp1: VarPath = to_var_path(bad_pair["left"])
+        vp2: VarPath = to_var_path(bad_pair["right"])
+        pairs: List[Tuple[Any, Any]] = list(map(tuple, bad_pair["exclude"]))
+
+        [var1_id] = [k for (k, v) in variables.items() if v[-len(vp1):] == vp1]
+        [var2_id] = [k for (k, v) in variables.items() if v[-len(vp2):] == vp2]
+
+        assert all(x in domains[var1_id] for (x, _) in pairs)
+        assert all(y in domains[var2_id] for (_, y) in pairs)
+
+        assert (var1_id, var2_id) not in filter_out
+        assert (var1_id, var2_id) not in filter_out
+
+        bad_pairs[(var1_id, var2_id)] = pairs
+
+        p_str = ', '.join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
+        v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
+        print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
+
+    return variables, domains, bad_pairs
 
 
-def get_names(variables: List[List[str]]) -> List[str]:
+def get_names(variables: Variables) -> Dict[VarId, str]:
 
-    left_vars = list(range(len(variables)))
-    names = [None] * len(variables)
-    depth = 1
+    left_vars: List[VarId] = list(variables.keys())  # variables to be named
+    names: Dict[VarId, str] = {}  # final names
+    depth: int = 1  # how many parts to take from the path
 
     while left_vars:
-        _names = [":".join(variables[j][-depth:]) for j in left_vars]
-        _left_vars = []
-        for i, idx in enumerate(left_vars):
-            if _names[i] in _names[:i] + _names[(i + 1):]:
-                left_vars.append(idx)
+        new_names = {j: ".".join(variables[j][-depth:]) for j in left_vars}
+        left_vars = []
+        for j, crt_name in new_names.items():
+            if len([0 for v in new_names.values() if v == crt_name]) > 1:
+                left_vars.append(j)
             else:
-                names[idx] = _names[i]
+                names[j] = new_names[j]
+        depth += 1
 
-        left_vars, depth = _left_vars, depth + 1
-    return variables
+    return names
 
 
-def combine_values(variables: List[List[str]],
-                   values: List[object],
-                   names: List[str]) -> dict:
-    crt_values = {}
-    info = []
-    for keys, value, name in zip(variables, values, names):
+def check_assignment(bad_pairs: BadPairs, assignment: Assignment) -> bool:
+    for (var1, var2), bad_values in bad_pairs.items():
+        if (assignment[var1], assignment[var2]) in bad_values:
+            return False
+    return True
+
+
+def prod_domains(domains: Domains, bad_pairs: BadPairs)-> Iterable[Assignment]:
+    return filter(partial(check_assignment, bad_pairs),
+                  map(lambda a: {k: v for (k, v) in zip(domains.keys(), a)},
+                      product(*domains.values())))
+
+
+def combine_values(variables: Variables, values: Assignment,
+                   names: Dict[int, str]) -> dict:
+    crt_values: dict = {}
+    info: List[str] = []
+    for var_id, value in values.items():
         parent = crt_values
-        for key in keys[:-1]:
+        var_path = variables[var_id]
+        for key in var_path[:-1]:
             parent = parent.setdefault(key, {})
-        parent[keys[-1]] = copy(value)
-        info.append(f"{'.'.join(name):s}={value}")
+        parent[var_path[-1]] = copy(value)
+        info.append(f"{'.'.join(names[var_id]):s}={value}")
     crt_values["title"] = "; ".join(info)
     return crt_values
 
@@ -103,7 +166,7 @@ def combine_values(variables: List[List[str]],
 def main():
     args = get_args()
     experiment = args.experiment
-    exp_path, config_path = get_paths(experiment, args.force or args.clean)
+    exp_path, config_path = check_paths(experiment, args.force or args.clean)
 
     if args.clean:
         print("Cleaned.")
@@ -114,21 +177,22 @@ def main():
 
     # BFS to get all variables
 
-    variables, domains = get_variables(config_data)
+    variables, domains, bad_pairs = get_variables(config_data)
     names = get_names(variables)
 
-    for name, domain in zip(names, domains):
-        print(f"{len(domain):d} values for "
+    for var_id, name in names.items():
+        print(f"{len(domains[var_id]):d} values for "
               f"{clr('.'.join(name), attrs=['bold']):s}")
-    total_no = reduce(mul, map(len, domains), 1)
-    print(f"{clr(f'{total_no:d} configurations', attrs=['bold']):s}"
-          f" will be created.")
 
-    for idx, values in enumerate(itertools.product(*domains)):
+    num = 0
+    for idx, values in enumerate(prod_domains(domains, bad_pairs)):
         crt_values = combine_values(variables, values, names)
         file_path = os.path.join(exp_path, f"{experiment:s}_{idx:d}.yaml")
         with open(file_path, "w") as yaml_file:
             yaml.safe_dump(crt_values, yaml_file, default_flow_style=False)
+        num += 1
+
+    print(f"{clr(f'{num:d} configurations', attrs=['bold']):s} created.")
     print("done.")
 
 
