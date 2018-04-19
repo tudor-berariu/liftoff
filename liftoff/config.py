@@ -1,11 +1,14 @@
-from argparse import Namespace
-from typing import List, Union
+import os.path
+from os import listdir
+from argparse import Namespace, ArgumentParser
+from typing import Any, List, Union
+import yaml
 from termcolor import colored as clr
 
 
 def namespace_to_dict(namespace: Namespace) -> dict:
     """Deep (recursive) transform from Namespace to dict"""
-    dct = {}
+    dct: dict = {}
     for key, value in namespace.__dict__.items():
         if isinstance(value, Namespace):
             dct[key] = namespace_to_dict(value)
@@ -26,7 +29,7 @@ def dict_to_namespace(dct: dict) -> Namespace:
     return namespace
 
 
-def value_of(cfg: Namespace, name: str, default=None) -> object:
+def value_of(cfg: Namespace, name: str, default=None) -> Any:
     return getattr(cfg, name) if hasattr(cfg, name) else default
 
 
@@ -57,9 +60,7 @@ def config_to_string(cfg: Namespace, indent: int = 0) -> str:
 
 
 def parse_args(strict: bool = True) -> Namespace:
-    import argparse
-
-    arg_parser = argparse.ArgumentParser()
+    arg_parser = ArgumentParser()
     arg_parser.add_argument(
         '-d', '--default-config-file',
         default='default',
@@ -129,14 +130,16 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
     list of `Namespace`s is returned.
 
     """
-    import yaml
-    import os.path
 
-    args = parse_args(strict=strict)
-    print(config_to_string(args))
+    args: Namespace = parse_args(strict=strict)
+    if value_of(args, "verbose", 0) > 0:
+        print(config_to_string(args))
+
+    path: str
+    default_config_file: str
+    config_files: List[str]
 
     if args.experiment:
-        from os import listdir
         path = os.path.join(args.configs_dir, args.experiment)
         config_files = [f for f in listdir(path)
                         if f.startswith(args.experiment + "_")
@@ -148,16 +151,17 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
         config_files = [f + ".yaml" for f in args.config_files]
         default_config_file = args.default_config_file + ".yaml"
 
-    cfgs = []
+    cfgs: List[Namespace] = []
+
     for config_file in config_files:
         with open(os.path.join(path, config_file)) as handler:
             config_data = yaml.load(handler, Loader=yaml.SafeLoader)
-        cfg = dict_to_namespace(config_data)
+        cfg: Namespace = dict_to_namespace(config_data)
 
         if default_config_file != config_file:
             with open(os.path.join(path, default_config_file)) as handler:
                 default_cfg_data = yaml.load(handler, Loader=yaml.SafeLoader)
-            default_cfg = dict_to_namespace(default_cfg_data)
+            default_cfg: Namespace = dict_to_namespace(default_cfg_data)
             _update_config(default_cfg, cfg)
             cfg = default_cfg
 

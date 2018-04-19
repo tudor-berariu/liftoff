@@ -1,5 +1,5 @@
 from argparse import ArgumentParser, Namespace
-from typing import List, Union
+from typing import Callable, List, Optional, Tuple
 from copy import deepcopy
 import os
 import re
@@ -15,8 +15,6 @@ from .config import read_config, namespace_to_dict, config_to_string, value_of
 
 Args = Namespace
 PID = int
-MaybeInt = Union[int, None]
-MaybeStr = Union[str, None]
 
 
 def parse_args() -> Args:
@@ -124,7 +122,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
 # --------------------------------------------
 # Run experiments as locally spawned processes
 
-def get_function(args: Args) -> callable:
+def get_function(args: Args) -> Callable[[Args], None]:
     import sys
     sys.path.append(os.getcwd())
     module_name = args.module
@@ -176,8 +174,11 @@ def get_max_procs(args: Args) -> int:
     return args.procs_no
 
 
-def launch(py_file: str, exp_args: Args,
-           env: MaybeStr, gpu: MaybeInt = None) -> PID:
+def launch(py_file: str,
+           exp_args: Args,
+           env: Optional[str],
+           gpu: Optional[int] = None) -> PID:
+
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
@@ -222,11 +223,14 @@ def get_command(pid: PID) -> str:
 
 def still_active(pid: PID, py_file: str) -> bool:
     cmd = get_command(pid)
-    return cmd and (py_file in cmd)
+    # return cmd and (py_file in cmd)  # mypy doesn't like this
+    if cmd:
+        return py_file in cmd
+    return False
 
 
 def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
-    active_procs = []
+    active_procs: List[Tuple[PID, Optional[int]]] = []
     max_procs_no = get_max_procs(args)
     print("The maximum number of experiments in parallel will be: ",
           max_procs_no)
