@@ -67,6 +67,18 @@ def parse_args() -> Args:
         type=str,
         dest="env",
         help="Conda environment.")
+    arg_parser.add_argument(
+        "--mkl",
+        type=int,
+        dest="mkl",
+        default=0,
+        help="Set MKL_NUM_THREADS. -1 not to change it.")
+    arg_parser.add_argument(
+        "--omp",
+        type=int,
+        dest="omp",
+        default=0,
+        help="Set OMP_NUM_THREADS. -1 not to change it.")
     return arg_parser.parse_known_args()[0]
 
 
@@ -85,11 +97,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
         alg_path = os.path.join(root_path, f"{j:d}_{title:s}")
         if not os.path.isdir(alg_path):
             os.makedirs(alg_path, exist_ok=True)
-        cfg_file = os.path.join(alg_path, "cfg.yaml")
-        if not os.path.isfile(cfg_file):
-            with open(cfg_file, "w") as yaml_file:
-                yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
-                               default_flow_style=False)
+
         if runs_no > 1:
             for run_id in range(runs_no):
                 exp_path = os.path.join(alg_path, f"{run_id:d}")
@@ -101,14 +109,21 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                         continue
                 else:
                     os.makedirs(exp_path)
+
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = run_id
                 new_cfg.out_dir = exp_path
-                new_cfg.cfg_dir = alg_path
+                new_cfg.cfg_dir = exp_path
                 exp_args.append(new_cfg)
+
+                cfg_file = os.path.join(exp_path, "cfg.yaml")
+                if not os.path.isfile(cfg_file):
+                    with open(cfg_file, "w") as yaml_file:
+                        yaml.safe_dump(namespace_to_dict(new_cfg), yaml_file,
+                                       default_flow_style=False)
+
         else:
             # if there's a single run, no individual folders are created
-
             results_file = os.path.join(alg_path, "results.pkl")
             if os.path.isfile(results_file):
                 print(f"Skipping {cfg.title:s}. {results_file:s} exists.")
@@ -118,6 +133,12 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                 new_cfg.out_dir = alg_path
                 new_cfg.cfg_dir = alg_path
                 exp_args.append(new_cfg)
+
+                cfg_file = os.path.join(alg_path, "cfg.yaml")
+                if not os.path.isfile(cfg_file):
+                    with open(cfg_file, "w") as yaml_file:
+                        yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
+                                       default_flow_style=False)
 
     return exp_args
 
@@ -180,14 +201,14 @@ def get_max_procs(args: Args) -> int:
 def launch(py_file: str,
            exp_args: Args,
            env: Optional[str],
-           gpu: Optional[int] = None) -> PID:
+           gpu: Optional[int] = None,
+           omp: Optional[int] = 0,
+           mkl: Optional[int] = 0) -> PID:
 
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
-    cmd = f"OMP_NUM_THREADS=1 " +\
-          f"MKL_NUM_THREADS=1 " +\
-          f" nohup python {py_file:s}" +\
+    cmd = f" nohup python {py_file:s}" +\
           f" --configs-dir {exp_args.cfg_dir:s}" +\
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
@@ -195,11 +216,17 @@ def launch(py_file: str,
           f" 2>{err_path:s} 1>{out_path:s}" +\
           f" & echo $!"
 
-    if gpu:
-        cmd = "CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s]"
+    if mkl and mkl > 0:
+        cmd = f"MKL_NUM_THREADS={mkl:d} {cmd:s}"
+
+    if omp and omp > 0:
+        cmd = f"OMP_NUM_THREADS={omp:d} {cmd:s}"
+
+    if gpu is not None:
+        cmd = f"CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s}"
 
     if env:
-        cmd = "source activate {env:s}; {cmd:s}"
+        cmd = f"source activate {env:s}; {cmd:s}"
 
     print(f"Command to be run:\n{cmd:s}")
 
@@ -255,7 +282,8 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
                     gpu = gpu_j
                     break
             next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, env, gpu=gpu)
+            new_pid = launch(py_file, next_args, env, gpu=gpu,
+                             omp=args.omp, mkl=args.mkl)
             active_procs.append((new_pid, gpu))
         else:
             time.sleep(1)
