@@ -1,11 +1,14 @@
 # liftoff #
 
-  - launch multiple local experiments;
-  - read config files;
+  - launch multiple local experiments using `liftoff`;
+  - prepare batches of experiments using `liftoff-prepare`;
+  - read and parse config files using `read_config` from `liftoff.config` ;
+
 
 ## Configuration files ##
 
 #### Assumptions ####
+
   - you configure parameters for your experiments using `yaml` files
   - you keep those configuration files in a folder called `./configs/`
   - you may want to use two files:
@@ -34,13 +37,11 @@
     and there several YAMLs:
       - `./configs/<experiment_name>/default.yaml`
       - `./configs/<experiment_name>/<experiment_name>_[...].yaml`
+	    - usually, these files are generated with `liftoff-prepare` based on a file `./configs/<experiment_name>/config.yaml`
+
 
     - Each of those files is combined with default exactly as above. A
     list of `Namespace`s is returned.
-
-#### Launching experiments ####
-
-    liftoff module.function --procs-no n --experiment <experiment_name>
 
 
 ### Scripts to be run ###
@@ -84,10 +85,66 @@ Namespace (`run`).
 
 #### Example ####
 
+See example under `./example` where script `smart_example.py` adds `x`, `yz.y` and `yz.z`.
+
+Run `rm -r results/*` to delete results from previous runs.
+
+##### Run a single experiment #####
+
+In order to run an experiment reading the configuration from
+`./configs/default.yaml` simply run `liftoff smart_example` or
+`liftoff smart_example.py`.
+
+
+    liftoff smart_example.py
+	
+
+You shoud see the program's output and also results saved in
+`./results/<timestamp>_default/`.
+
+
+##### Run the default configuration several times #####
+
+You can run an experiment several times using `--runs-no`:
+
+
+    liftoff smart_example.py --runs-no 12 --procs-no 4  --no-detach
+
+
+A new folder under `./results/` should appear with a subfolder for
+each run.  The previous command made all processes output to the
+screen. Chaos. In order to redirect the output of each process to a
+separate file detach processes using system commands executed with `nohup`.
+
+
+    liftoff smart_example --runs-no 12 --procs-no 4
 
 
 
+##### Running batches of experiments #####
+
+See `./configs/test_experiment/config.yaml` for an example of
+configuring a batch of experiments. You should firrst run
+`liftoff-prepare` to generate all the necessary config files, and then
+launch the experiment with `liftoff -e`.
 
 
+    liftoff-prepare test_experiment -c
+	liftoff-prepare test_experiment
+	liftoff smart_example.py -e test_experiment --procs-no 4
 
-See [this project](https://github.com/tudor-berariu/lifelong-learning)
+
+##### Filter out some unwanted configurations #####
+
+
+See the `filter_out` section in
+	`./configs/filter_out/config.yaml`. Some combinations of values
+	will be discarded.
+
+
+	liftoff-prepare filter_out -c
+	liftoff-prepare filter_out
+	liftoff smart_example.py -e filter_out
+
+
+Also, See [this project](https://github.com/tudor-berariu/lifelong-learning)
