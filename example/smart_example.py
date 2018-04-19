@@ -9,10 +9,12 @@ from liftoff.config import read_config, config_to_string
 def run(args: Namespace):
     print(f"[{args.run_id:d}] Starting.", flush=True)
     print(f"[{args.run_id:d}] Got this:", config_to_string(args), flush=True)
-    print(f"Computing {int(args.x):d} + {int(args.y):d} = ",
+    print(f"Computing {args.x:d} + {args.yz.y:d} + {args.yz.z:d} = ",
           end="", flush=True)
-    sleep(randint(2, 10))
-    print(args.x + args.y, flush=True)
+    sleep(randint(1, 5))
+    print(f"... ", end="", flush=True)
+    sleep(randint(1, 5))
+    print(args.x + args.yz.y + args.yz.z, flush=True)
     print(f"[{args.run_id:d}] Done.", flush=True)
 
 
