@@ -182,7 +182,7 @@ def main():
 
     for var_id, name in names.items():
         print(f"{len(domains[var_id]):d} values for "
-              f"{clr('.'.join(name), attrs=['bold']):s}")
+              f"{clr(name, attrs=['bold']):s}")
 
     num = 0
     for idx, values in enumerate(prod_domains(domains, bad_pairs)):
