@@ -77,8 +77,11 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
     exp_args = []
     for j, cfg in enumerate(cfgs):
         title = cfg.title
-        for char in " -.,=:;/()":
+        for char in " -.,=:;/()[]'":
             title = title.replace(char, "_")
+        while "___" in title:
+            title = title.replace("___", "__")
+
         alg_path = os.path.join(root_path, f"{j:d}_{title:s}")
         if not os.path.isdir(alg_path):
             os.makedirs(alg_path, exist_ok=True)

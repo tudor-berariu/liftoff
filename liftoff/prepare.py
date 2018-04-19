@@ -158,7 +158,7 @@ def combine_values(variables: Variables, values: Assignment,
         for key in var_path[:-1]:
             parent = parent.setdefault(key, {})
         parent[var_path[-1]] = copy(value)
-        info.append(f"{'.'.join(names[var_id]):s}={value}")
+        info.append(f"{names[var_id]:s}={value}")
     crt_values["title"] = "; ".join(info)
     return crt_values
 
@@ -187,6 +187,8 @@ def main():
     num = 0
     for idx, values in enumerate(prod_domains(domains, bad_pairs)):
         crt_values = combine_values(variables, values, names)
+        crt_values["_experiment_parameters"] = \
+            {names[var_id]: value for var_id, value in values.items()}
         file_path = os.path.join(exp_path, f"{experiment:s}_{idx:d}.yaml")
         with open(file_path, "w") as yaml_file:
             yaml.safe_dump(crt_values, yaml_file, default_flow_style=False)
