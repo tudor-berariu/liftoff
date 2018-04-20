@@ -259,6 +259,12 @@ def still_active(pid: PID, py_file: str) -> bool:
     return False
 
 
+def dump_pids(path, pids):
+    with open(path, "w") as f:
+        for pid in pids:
+            f.write(f"{pid:d}\n")
+
+
 def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
     active_procs: List[Tuple[PID, Optional[int]]] = []
     max_procs_no = get_max_procs(args)
@@ -285,16 +291,21 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
             new_pid = launch(py_file, next_args, env, gpu=gpu,
                              omp=args.omp, mkl=args.mkl)
             active_procs.append((new_pid, gpu))
+            dump_pids(root_path, [pid for (pid, _) in active_procs])
         else:
             time.sleep(1)
 
         old_active_procs = active_procs
         active_procs = []
+        changed = False
         for (pid, gpu) in old_active_procs:
             if still_active(pid, py_file):
                 active_procs.append((pid, gpu))
             else:
+                changed = True
                 print(f"Process {pid:d} seems to be done.")
+        if changed:
+            dump_pids(root_path, [pid for (pid, _) in active_procs])
 
     wait_time = 1
     while active_procs:
