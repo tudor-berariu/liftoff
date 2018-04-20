@@ -208,7 +208,7 @@ def launch(py_file: str,
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
-    cmd = f" nohup python {py_file:s}" +\
+    cmd = f" nohup python -u {py_file:s}" +\
           f" --configs-dir {exp_args.cfg_dir:s}" +\
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
