@@ -260,9 +260,9 @@ def still_active(pid: PID, py_file: str) -> bool:
 
 
 def dump_pids(path, pids):
-    with open(path, "w") as f:
+    with open(os.path.join(path, "active_pids"), "w") as file_handler:
         for pid in pids:
-            f.write(f"{pid:d}\n")
+            file_handler.write(f"{pid:d}\n")
 
 
 def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
