@@ -210,14 +210,19 @@ def launch(py_file: str,
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
-    cmd = f" nohup python -u {py_file:s}" +\
+    cmd = f" date +%s 1> {os.path.join(exp_args.out_dir, '.__start'):s} 2>/dev/null &&" +\
+          f" nohup sh -c 'python -u {py_file:s}" +\
           f" --configs-dir {exp_args.cfg_dir:s}" +\
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
           f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
+          f" && date +%s > {os.path.join(exp_args.out_dir, '.__end'):s}" +\
+          f" || date +%s > {os.path.join(exp_args.out_dir, '.__crash'):s}'" +\
+          f" 1> /dev/null 2> /dev/null" +\
           f" & echo $!"
+    #f" & ps --ppid $! -o pid h"
 
     if mkl and mkl > 0:
         cmd = f"MKL_NUM_THREADS={mkl:d} {cmd:s}"
