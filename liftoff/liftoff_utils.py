@@ -48,7 +48,7 @@ def get_liftoff_processes()-> List[Tuple[PID, Optional[str]]]:
         elif "--experiment" in parts:
             experiment = parts[parts.index("--experiment") + 1]
 
-        procs.append(pid, experiment)
+        procs.append((pid, experiment))
 
     return procs
 
@@ -117,6 +117,11 @@ def display_progress(timestamp: Optional[Timestamp] = None,
         data["Total"] = total_no
 
     print(tabulate.tabulate(data))
+
+
+def status()-> None:
+    args = parse_args()
+    display_progress(args.timestamp, args.experiment)
 
 
 if __name__ == "__main__":
