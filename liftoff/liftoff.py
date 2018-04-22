@@ -200,6 +200,8 @@ def get_max_procs(args: Args) -> int:
 
 def launch(py_file: str,
            exp_args: Args,
+           timestamp: int,
+           ppid: int,
            env: Optional[str],
            gpu: Optional[int] = None,
            omp: Optional[int] = 0,
@@ -213,6 +215,7 @@ def launch(py_file: str,
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
+          f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
           f" & echo $!"
 
@@ -265,9 +268,12 @@ def dump_pids(path, pids):
             file_handler.write(f"{pid:d}\n")
 
 
-def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
+def run_from_system(root_path: str, timestamp: int,
+                    cfgs: List[Args], args: Args) -> None:
     active_procs: List[Tuple[PID, Optional[int]]] = []
     max_procs_no = get_max_procs(args)
+    crt_pid = os.getpid()
+    print(f"PID of current process is {crt_pid:d}.")
     print("The maximum number of experiments in parallel will be: ",
           max_procs_no)
 
@@ -288,8 +294,8 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
                     gpu = gpu_j
                     break
             next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, env, gpu=gpu,
-                             omp=args.omp, mkl=args.mkl)
+            new_pid = launch(py_file, next_args, timestamp, crt_pid,
+                             env, gpu=gpu, omp=args.omp, mkl=args.mkl)
             active_procs.append((new_pid, gpu))
             dump_pids(root_path, [pid for (pid, _) in active_procs])
         else:
@@ -311,18 +317,21 @@ def run_from_system(root_path: str, cfgs: List[Args], args: Args) -> None:
     while active_procs:
         time.sleep(wait_time)
         wait_time = min(wait_time + 1, 30)
-        active_procs = []
-        for (pid, gpu) in active_procs:
+        old_active_procs, active_procs, changed = active_procs, [], False
+        for (pid, gpu) in old_active_procs:
             if still_active(pid, py_file):
                 active_procs.append((pid, gpu))
             else:
+                changed = True
                 wait_time = 1
                 print(f"Process {pid:d} seems to be done.")
-        print("Still active: " +
-              ",".join([str(pid) for (pid, _) in active_procs]) +
-              ". Stop this at any time with no risks.")
+        if changed and active_procs:
+            dump_pids(root_path, [pid for (pid, _) in active_procs])
+            print("Still active: " +
+                  ",".join([str(pid) for (pid, _) in active_procs]) +
+                  ". Stop this at any time with no risks.")
 
-    print("All done!")
+    print(clr("All done!", attrs=["bold"]))
 
 
 def main():
@@ -335,7 +344,8 @@ def main():
     cfg0 = cfgs if not isinstance(cfgs, list) else cfgs[0]
     cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
 
-    root_path = None
+    root_path: str = None
+    timestamp: int
     if args.resume:
         experiment = cfg0.experiment
         previous = [f for f in os.listdir("./results/")
@@ -345,10 +355,12 @@ def main():
             print("Resuming", last_time, "!")
             root_path = os.path.join("results",
                                      f"{last_time:s}_{experiment:s}")
+            timestamp = int(last_time)
             assert os.path.isdir(root_path)
 
     if root_path is None:
-        root_path = f"results/{int(time.time()):d}_{cfg0.experiment:s}/"
+        timestamp = int(time.time())
+        root_path = f"results/{timestamp:d}_{cfg0.experiment:s}/"
         assert not os.path.exists(root_path)
         os.makedirs(root_path)
 
@@ -376,7 +388,7 @@ def main():
     if args.no_detach:
         spawn_from_here(root_path, cfgs, args)
     else:
-        run_from_system(root_path, cfgs, args)
+        run_from_system(root_path, timestamp, cfgs, args)
 
 
 if __name__ == "__main__":
