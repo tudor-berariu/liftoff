@@ -4,6 +4,8 @@ from argparse import ArgumentParser, Namespace
 from typing import List, Optional, Tuple
 import subprocess
 import tabulate
+from termcolor import colored as clr
+from collections import OrderedDict
 
 Args = Namespace
 PID = int
@@ -61,11 +63,13 @@ def get_active_children(ppid: PID,
     cmd = f"for p in `pgrep -f '"
     if timestamp:
         cmd += f"\\-\\-timestamp {timestamp:s}"
-    cmd += f" \\-\\-ppid {ppid:d}'`; do ps -p $p -o pid,ppid,cmd h; done"
+    cmd += f" \\-\\-ppid {ppid:d}'`; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
 
     result = subprocess.run(cmd,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             shell=True)
+    # print(result.stdout)
+
     if result.stderr:
         assert False, result.stderr.decode("utf-8")
     timestamps = []
@@ -111,12 +115,13 @@ def get_status(timestamp: Optional[Timestamp] = None,
 
 def display_progress(experiments: List[Tuple[PID, Timestamp, str, List[PID]]]) -> None:
     data = {h: [] for h in
-            ["PID", "Timestamp", "Experiment", "Active", "Done", "Total",
-             "Parallelism", "Avg. time", "Time left"]}
+            ["PID", "Timestamp", "Experiment", "Active", "Done",
+             "Crashed", "Total",
+             "Px", "Avg.time", "Time left"]}
     for ppid, timestamp, experiment, pids in experiments:
         data["PID"].append(ppid)
         data["Timestamp"].append(timestamp)
-        data["Experiment"].append(experiment)
+        data["Experiment"].append(clr(experiment, 'yellow', attrs=['bold']))
         data["Active"].append(len(pids))
 
         exp_dirs = [d for d in os.listdir('results') if timestamp in d]
@@ -153,27 +158,49 @@ def display_progress(experiments: List[Tuple[PID, Timestamp, str, List[PID]]]) -
         wall_time = int(time.time()) - min_time
         total_run_time = total_time + active_elapsed
         factor = float(total_run_time) / wall_time
-        data["Parallelism"].append(factor)
+        data["Px"].append(factor)
         if done + crashed > 0:
             avg_time = float(total_time) / (done + crashed)
-            data["Avg. time"].append(avg_time)
+            data["Avg.time"].append(avg_time)
             left_no = total - done - crashed
             data["Time left"].append(
                 (left_no * avg_time - active_elapsed) / factor)
         else:
-            data["Avg. time"].append(None)
+            data["Avg.time"].append(None)
             data["Time left"].append(None)
 
         data["Done"].append(done)
+        data["Crashed"].append(crashed)
         data["Total"].append(total)
 
-    print(tabulate.tabulate(data, headers="keys"))
+    if data['Active']:
+        f_a = max(len(f'{a: d}') for a in data['Active'])
+        f_c = max(len(f'{c: d}') for c in data['Crashed'])
+        f_d = max(len(f'{d: d}') for d in data['Done'])
+
+    acd = zip(data["Active"], data["Crashed"], data["Done"])
+
+    data["Active/Crashed/Done"] = [f"{clr(f'{a: {f_a}d}', 'yellow'):s} /"
+                                   f" {clr(f'{c: {f_c}d}', 'red'):s} / "
+                                   f"{clr(f'{d: {f_d}d}', 'green'):s}"
+                                   for (a, c, d) in acd]
+
+    del data["Active"]
+    del data["Crashed"]
+    del data["Done"]
+
+    o_data = OrderedDict([(key, data[key]) for key in
+                          ["PID", "Timestamp", "Experiment", "Active/Crashed/Done",
+                           "Total", "Px", "Avg.time", "Time left"]])
+
+    print(tabulate.tabulate(o_data, headers="keys"))
 
 
 def ask_user(experiments, to_kill):
     display_progress(experiments)
+    b_to_kill = [clr(t, 'yellow', attrs=['bold']) for t in to_kill]
     answer = str(input(f"\nAre you sure you want to kill "
-                       f"{','.join(to_kill):s}?"
+                       f"{', '.join(b_to_kill):s}?"
                        f"(y/n): ")).lower().strip()
     try:
         if answer[0] == 'y':

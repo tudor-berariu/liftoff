@@ -11,8 +11,10 @@ def run(args: Namespace):
     print(f"[{args.run_id:d}] Got this:", config_to_string(args), flush=True)
     print(f"Computing {args.x:d} + {args.yz.y:d} + {args.yz.z:d} = ",
           end="", flush=True)
-    sleep(randint(1, 5))
+    sleep(randint(5, 30))
     print(f"... ", end="", flush=True)
+    if randint(1, 10) % 7 == 0:
+        _ = [][0]  # Error
     sleep(randint(1, 5))
     print(args.x + args.yz.y + args.yz.z, flush=True)
     print(f"[{args.run_id:d}] Done.", flush=True)
