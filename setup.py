@@ -16,4 +16,8 @@ setup(name='liftoff',
       author_email='tudor.berariu@gmail.com',
       license='MIT',
       packages=['liftoff'],
+      install_requires=[
+          'tabulate'
+          'termcolor'
+      ],
       zip_safe=False)
