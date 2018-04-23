@@ -94,22 +94,6 @@ def get_active_children(ppid: PID,
     return list(timestamps)[0], pids
 
 
-def ask_user():
-    check = str(input("Question ? (Y/N): ")).lower().strip()
-    try:
-        if check[0] == 'y':
-            return True
-        elif check[0] == 'n':
-            return False
-        else:
-            print('Invalid Input')
-            return ask_user()
-    except Exception as error:
-        print("Please enter valid inputs")
-        print(error)
-        return ask_user()
-
-
 def get_status(timestamp: Optional[Timestamp] = None,
                experiment: Optional[str] = None
                ) -> List[Tuple[PID, Timestamp, str, List[PID]]]:
@@ -119,17 +103,17 @@ def get_status(timestamp: Optional[Timestamp] = None,
             continue
         tstamp, pids = get_active_children(ppid, timestamp)
         if timestamp and timestamp != tstamp:
+            print("fxsafds")
             continue
         results.append((ppid, tstamp, exp, pids))
     return results
 
 
-def display_progress(timestamp: Optional[Timestamp] = None,
-                     experiment: Optional[str] = None) -> None:
+def display_progress(experiments: List[Tuple[PID, Timestamp, str, List[PID]]]) -> None:
     data = {h: [] for h in
             ["PID", "Timestamp", "Experiment", "Active", "Done", "Total",
              "Parallelism", "Avg. time", "Time left"]}
-    for ppid, timestamp, experiment, pids in get_status(timestamp, experiment):
+    for ppid, timestamp, experiment, pids in experiments:
         data["PID"].append(ppid)
         data["Timestamp"].append(timestamp)
         data["Experiment"].append(experiment)
@@ -186,10 +170,61 @@ def display_progress(timestamp: Optional[Timestamp] = None,
     print(tabulate.tabulate(data, headers="keys"))
 
 
+def ask_user(experiments, to_kill):
+    display_progress(experiments)
+    answer = str(input(f"\nAre you sure you want to kill "
+                       f"{','.join(to_kill):s}?"
+                       f"(y/n): ")).lower().strip()
+    try:
+        if answer[0] == 'y':
+            return True
+        elif answer[0] == 'n':
+            return False
+        return ask_user(experiments, to_kill)
+    except Exception as error:
+        print(error)
+        return ask_user(experiments, to_kill)
+
+
+def kill_all(ppid: PID, timestamp: Timestamp):
+    assert ppid > 1 and timestamp
+
+    cmd = f"kill {ppid:d}"
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
+    if result.stderr:
+        print("Something went wrong: ")
+        print(result.stderr.decode("utf-8"))
+
+    cmd = f"for p in `pgrep -f '"
+    cmd += f"\\-\\-timestamp {timestamp:s}"
+    cmd += f" \\-\\-ppid {ppid:d}'`; do kill $p; done"
+
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
+    if result.stderr:
+        print("Something went wrong: ")
+        print(result.stderr.decode("utf-8"))
+
+
 def status()-> None:
     args = parse_args()
-    display_progress(args.timestamp, args.experiment)
+    experiments = get_status(args.timestamp, args.experiment)
+    display_progress(experiments)
+
+
+def abort() -> None:
+    args = parse_args()
+    experiments = get_status(args.timestamp, args.experiment)
+    if len(experiments) > 1 and not args.all:
+        latest_tmstmp = max(t for (_ppid, t, _exp, _pids) in experiments)
+        to_kill = [latest_tmstmp]
+    else:
+        to_kill = [t for (_ppid, t, _exp, _pids) in experiments]
+
+    if ask_user(experiments, to_kill):
+        for ppid, timestamp, _experiment, _pids in experiments:
+            if timestamp in to_kill:
+                kill_all(ppid, timestamp)
 
 
 if __name__ == "__main__":
-    display_progress()
+    status()

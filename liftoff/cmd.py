@@ -12,3 +12,8 @@ def prepare():
 def status():
     from liftoff.liftoff_utils import status as _status
     _status()
+
+
+def abort():
+    from liftoff.liftoff_utils import abort as _abort
+    _abort()
