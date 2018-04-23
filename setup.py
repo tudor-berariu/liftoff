@@ -17,7 +17,7 @@ setup(name='liftoff',
       license='MIT',
       packages=['liftoff'],
       install_requires=[
-          'tabulate'
+          'tabulate',
           'termcolor'
       ],
       zip_safe=False)
