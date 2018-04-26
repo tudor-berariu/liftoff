@@ -1,17 +1,21 @@
 from argparse import ArgumentParser, Namespace
 from typing import Callable, List, Optional, Tuple
 from copy import deepcopy
+import sys
 import os
+from functools import partial
 import re
 from importlib import import_module
 import multiprocessing
 import multiprocessing.pool
 import time
+import traceback
 import subprocess
 import yaml
 from termcolor import colored as clr
 
 from .config import read_config, namespace_to_dict, config_to_string, value_of
+from .utils.sys_interaction import systime_to
 
 Args = Namespace
 PID = int
@@ -102,10 +106,10 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
             for run_id in range(runs_no):
                 exp_path = os.path.join(alg_path, f"{run_id:d}")
                 if os.path.isdir(exp_path):
-                    results_file = os.path.join(exp_path, "results.pkl")
-                    if os.path.isfile(results_file):
+                    end_file = os.path.join(exp_path, ".__end")
+                    if os.path.isfile(end_file):
                         print(f"Skipping {cfg.title:s} <{run_id:d}>. "
-                              f"{results_file:s} exists.")
+                              f"{end_file:s} exists.")
                         continue
                 else:
                     os.makedirs(exp_path)
@@ -124,9 +128,9 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
 
         else:
             # if there's a single run, no individual folders are created
-            results_file = os.path.join(alg_path, "results.pkl")
-            if os.path.isfile(results_file):
-                print(f"Skipping {cfg.title:s}. {results_file:s} exists.")
+            end_file = os.path.join(alg_path, ".__end")
+            if os.path.isfile(end_file):
+                print(f"Skipping {cfg.title:s}. {end_file:s} exists.")
             else:
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = 0
@@ -146,15 +150,29 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
 # --------------------------------------------
 # Run experiments as locally spawned processes
 
+
+def wrapper(function: Callable[[Args], None], args: Args) -> None:
+    start_file = os.path.join(args.out_dir, ".__start")
+    end_file = os.path.join(args.out_dir, ".__end")
+    crash_file = os.path.join(args.out_dir, ".__crash")
+
+    try:
+        systime_to(start_file)
+        function(args)
+        systime_to(end_file)
+    except:
+        traceback.print_exc(file=sys.stderr)
+        systime_to(crash_file)
+
+
 def get_function(args: Args) -> Callable[[Args], None]:
-    import sys
     sys.path.append(os.getcwd())
     module_name = args.module
     if module_name.endswith(".py"):
         module_name = module_name[:-3]
     module = import_module(module_name)
     assert "run" in module.__dict__, "Module must have function run(args)."
-    return module.__dict__["run"]
+    return partial(wrapper, module.__dict__["run"])
 
 
 def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
@@ -371,12 +389,11 @@ def main():
 
     if len(cfgs) == 1 and args.runs_no == 1:
         cfg = cfgs[0]
-        # If there's a single experiment no subfolders are created
 
-        # Check if results file is already there (experiment is over)
-        results_file = os.path.join(root_path, "results.pkl")
-        if os.path.isfile(results_file):
-            print(f"Skipping {cfgs[0].title:s}. {results_file:s} exists.")
+        # Check if .__end file is already there (experiment is over)
+        end_file = os.path.join(root_path, ".__end")
+        if os.path.isfile(end_file):
+            print(f"Skipping {cfgs[0].title:s}. {end_file:s} exists.")
             return
 
         # Dump config file if there is none
@@ -385,12 +402,9 @@ def main():
             with open(cfg_file, "w") as yaml_file:
                 yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
                                default_flow_style=False)
-        cfg.out_dir = root_path
-        cfg.run_id = 0
+        cfg.out_dir, cfg.run_id = root_path, 0
         get_function(args)(cfg)
-        return
-
-    if args.no_detach:
+    elif args.no_detach:
         spawn_from_here(root_path, cfgs, args)
     else:
         run_from_system(root_path, timestamp, cfgs, args)

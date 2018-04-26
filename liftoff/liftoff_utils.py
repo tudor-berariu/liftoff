@@ -33,7 +33,7 @@ def parse_args() -> Args:
 def get_liftoff_processes()-> List[Tuple[PID, Optional[str]]]:
     result = subprocess.run(
         f"for p in `pgrep -f 'liftoff[[:blank:]]'`;"
-        f" do ps -p $p -o pid,cmd h; done",
+        f" do ps -p $p -o pid,ppid,cmd h; done",
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         shell=True)
 
@@ -46,20 +46,24 @@ def get_liftoff_processes()-> List[Tuple[PID, Optional[str]]]:
             continue
         parts = line.split()
         pid = int(parts[0])
+        ppid = int(parts[1])
         experiment: Optional[str] = None
         if "-e" in parts:
             experiment = parts[parts.index("-e") + 1]
         elif "--experiment" in parts:
             experiment = parts[parts.index("--experiment") + 1]
 
-        procs.append((pid, experiment))
+        procs.append((pid, ppid, experiment))
 
-    return procs
+    real_procs = [(p, e) for (p, ppid, e) in procs
+                  if ppid not in [p for (p, _, _) in procs]]
+
+    return real_procs
 
 
-def get_active_children(ppid: PID,
-                        timestamp: Optional[Timestamp]
-                        )-> Tuple[Timestamp, List[PID]]:
+def get_nohup_children(ppid: PID,
+                       timestamp: Optional[Timestamp]
+                       )-> Tuple[Optional[Timestamp], List[PID]]:
     cmd = f"for p in `pgrep -f '"
     if timestamp:
         cmd += f"\\-\\-timestamp {timestamp:s}"
@@ -94,8 +98,32 @@ def get_active_children(ppid: PID,
     if timestamp and not pids:
         return None, []
     if not timestamps:
-        print(f"No timestamps for PPID={ppid:d}!")
+        print(f"No timestamps for PPID={ppid:d}! Must be a single run.")
+        return None, []
     return list(timestamps)[0], pids
+
+
+def get_multiprocess_children(ppid: PID)-> Tuple[Optional[Timestamp], List[PID]]:
+
+    cmd = f"for p in `pgrep -f 'liftoff[[:blank:]]'`; " +\
+          f"do ps -p $p -o pid,ppid h; done"
+    result = subprocess.run(cmd,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            shell=True)
+    # print(result.stdout)
+
+    if result.stderr:
+        assert False, result.stderr.decode("utf-8")
+    pids = []
+    for line in result.stdout.decode("utf-8").split('\n'):
+        if not line:
+            continue
+        parts = line.split()
+        if int(parts[1]) != ppid:
+            continue
+        pids.append(int(parts[0]))
+
+    return None, pids
 
 
 def get_status(timestamp: Optional[Timestamp] = None,
@@ -105,23 +133,36 @@ def get_status(timestamp: Optional[Timestamp] = None,
     for ppid, exp in get_liftoff_processes():
         if experiment and experiment != exp:
             continue
-        tstamp, pids = get_active_children(ppid, timestamp)
+        tstamp, pids = get_nohup_children(ppid, timestamp)
+        if not pids:
+            tstamp, pids = get_multiprocess_children(ppid)
         if timestamp and timestamp != tstamp:
-            print("fxsafds")
             continue
         results.append((ppid, tstamp, exp, pids))
     return results
 
 
-def display_progress(experiments: List[Tuple[PID, Timestamp, str, List[PID]]]) -> None:
+def display_progress(experiments: List[Tuple[PID, Optional[Timestamp], str, List[PID]]]) -> None:
     data = {h: [] for h in
             ["PID", "Timestamp", "Experiment", "Active", "Done",
              "Crashed", "Total",
              "Px", "Avg.time", "Time left"]}
     for ppid, timestamp, experiment, pids in experiments:
         data["PID"].append(ppid)
-        data["Timestamp"].append(timestamp)
         data["Experiment"].append(clr(experiment, 'yellow', attrs=['bold']))
+
+        if timestamp is None:
+            data["Timestamp"].append("unk")
+            data["Active"].append(len(pids) if pids else 1)
+            data["Px"].append(None)
+            data["Avg.time"].append(None)
+            data["Time left"].append(None)
+            data["Done"].append(0)
+            data["Crashed"].append(0)
+            data["Total"].append(None if pids else 1)
+            continue
+
+        data["Timestamp"].append(timestamp)
         data["Active"].append(len(pids))
 
         exp_dirs = [d for d in os.listdir('results') if timestamp in d]
