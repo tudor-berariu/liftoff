@@ -1,15 +1,24 @@
 import os
 import time
 from argparse import ArgumentParser, Namespace
-from typing import List, Optional, Tuple
+from typing import List, Optional, NamedTuple
 import subprocess
-import tabulate
-from termcolor import colored as clr
 from collections import OrderedDict
+from termcolor import colored as clr
+import tabulate
 
 Args = Namespace
 PID = int
-Timestamp = str
+
+
+class Experiment(NamedTuple):
+    ppid: PID
+    experiment: str
+    timestamp: str
+    root_path: str
+    mode: str
+    pids: str
+    is_running: bool = True
 
 
 def parse_args() -> Args:
@@ -30,149 +39,136 @@ def parse_args() -> Args:
     return arg_parser.parse_args()
 
 
-def get_liftoff_processes()-> List[Tuple[PID, Optional[str]]]:
-    result = subprocess.run(
-        f"for p in `pgrep -f 'liftoff[[:blank:]]'`;"
-        f" do ps -p $p -o pid,ppid,cmd h; done",
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        shell=True)
+# -- Code for running processes
 
-    if result.stderr:
-        assert False, result.stderr.decode("utf-8")
+def get_running_liftoffs(timestamp: Optional[str],
+                         experiment: Optional[str])-> List[Experiment]:
 
-    procs = []
-    for line in result.stdout.decode("utf-8").split('\n'):
-        if not line:
-            continue
-        parts = line.split()
-        pid = int(parts[0])
-        ppid = int(parts[1])
-        experiment: Optional[str] = None
-        if "-e" in parts:
-            experiment = parts[parts.index("-e") + 1]
-        elif "--experiment" in parts:
-            experiment = parts[parts.index("--experiment") + 1]
-
-        procs.append((pid, ppid, experiment))
-
-    real_procs = [(p, e) for (p, ppid, e) in procs
-                  if ppid not in [p for (p, _, _) in procs]]
-
-    return real_procs
-
-
-def get_nohup_children(ppid: PID,
-                       timestamp: Optional[Timestamp]
-                       )-> Tuple[Optional[Timestamp], List[PID]]:
-    cmd = f"for p in `pgrep -f '"
-    if timestamp:
-        cmd += f"\\-\\-timestamp {timestamp:s}"
-    cmd += f" \\-\\-ppid {ppid:d}'`; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
+    cmd = "COLUMNS=0 pgrep liftoff" \
+        " | xargs -r -n 1 grep -f results/*/.__ppid -e" \
+        " | cut -f 1 -d':'" \
+        " | xargs -n 1 -r dirname" \
+        " | xargs -n 1 -r -I_DIR -- " \
+        "sh -c 'echo _DIR" \
+        " $(cat _DIR/.__ppid)" \
+        " $(cat _DIR/.__mode)" \
+        " $(cat _DIR/.__timestamp)" \
+        " $(echo _DIR | cut -f2- -d_)'"
 
     result = subprocess.run(cmd,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
                             shell=True)
-    # print(result.stdout)
 
     if result.stderr:
-        assert False, result.stderr.decode("utf-8")
-    timestamps = []
-    pids = []
-    for line in result.stdout.decode("utf-8").split('\n'):
+        raise Exception(result.stderr.decode("utf-8"))
+
+    running = []
+    for line in result.stdout.decode("utf-8").split("\n"):
         if not line:
             continue
-        parts = line.split()
-        if int(parts[1]) != 1:
-            continue
-        if "--timestamp" not in parts:
-            print("Strange command: ", line)
-            continue
-        pids.append(int(parts[0]))
-        timestamps.append(parts[parts.index("--timestamp") + 1])
-
-    timestamps = set(timestamps)
-
-    if len(timestamps) > 1:
-        print(f"This is strange! Multiple timestamps for PPID={ppid:d}!")
-        assert False
-    if timestamp and not pids:
-        return None, []
-    if not timestamps:
-        print(f"No timestamps for PPID={ppid:d}! Must be a single run.")
-        return None, []
-    return list(timestamps)[0], pids
-
-
-def get_multiprocess_children(ppid: PID)-> Tuple[Optional[Timestamp], List[PID]]:
-
-    cmd = f"for p in `pgrep -f 'liftoff[[:blank:]]'`; " +\
-          f"do ps -p $p -o pid,ppid h; done"
-    result = subprocess.run(cmd,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            shell=True)
-    # print(result.stdout)
-
-    if result.stderr:
-        assert False, result.stderr.decode("utf-8")
-    pids = []
-    for line in result.stdout.decode("utf-8").split('\n'):
-        if not line:
-            continue
-        parts = line.split()
-        if int(parts[1]) != ppid:
-            continue
-        pids.append(int(parts[0]))
-
-    return None, pids
-
-
-def get_status(timestamp: Optional[Timestamp] = None,
-               experiment: Optional[str] = None
-               ) -> List[Tuple[PID, Timestamp, str, List[PID]]]:
-    results = []
-    for ppid, exp in get_liftoff_processes():
+        (path, ppid, mode, tmstmp, exp) = line.split()
         if experiment and experiment != exp:
             continue
-        tstamp, pids = get_nohup_children(ppid, timestamp)
-        if not pids:
-            tstamp, pids = get_multiprocess_children(ppid)
-        if timestamp and timestamp != tstamp:
+        if timestamp and timestamp != tmstmp:
             continue
-        results.append((ppid, tstamp, exp, pids))
-    return results
+        if mode == "single":
+            pids = []
+        elif mode == "multiprocess":
+            result = subprocess.run(f"ps --ppid {ppid:s} -o pid h",
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    shell=True)
+            if result.stderr:
+                raise Exception(result.stderr.decode("utf-8"))
+            pids = [int(l.strip())
+                    for l in result.stdout.decode("utf-8").split("\n") if l]
+        elif mode == "nohup":
+            cmd = f"for p in "\
+                  f"`pgrep -f '\\-\\-timestamp {tmstmp:s} \\-\\-ppid {ppid:s}'`"\
+                  f"; do COLUMNS=0 ps -p $p -o pid,ppid h; done"
+
+            result = subprocess.run(cmd,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE,
+                                    shell=True)
+            if result.stderr:
+                raise Exception(result.stderr.decode("utf-8"))
+            pids = []
+            for line1 in result.stdout.decode("utf-8").split("\n"):
+                if not line1:
+                    continue
+
+                [pid, _ppid] = list(map(int, line1.split()))
+                if _ppid == 1:
+                    pids.append(pid)
+
+        running.append(Experiment(int(ppid), exp, tmstmp, path, mode, pids))
+
+    return running
 
 
-def display_progress(experiments: List[Tuple[PID, Optional[Timestamp], str, List[PID]]]) -> None:
-    data = {h: [] for h in
-            ["PID", "Timestamp", "Experiment", "Active", "Done",
-             "Crashed", "Total",
-             "Px", "Avg.time", "Time left"]}
-    for ppid, timestamp, experiment, pids in experiments:
-        data["PID"].append(ppid)
-        data["Experiment"].append(clr(experiment, 'yellow', attrs=['bold']))
+def get_all_from_results(timestamp: Optional[str],
+                         experiment: Optional[str])-> List[Experiment]:
+    experiments = get_running_liftoffs(timestamp, experiment)
+    cmd = "COLUMNS=0 find results/*/.__timestamp" \
+        " | xargs -n 1 -r dirname" \
+        " | xargs -n 1 -r -I_DIR -- " \
+        "sh -c 'echo _DIR" \
+        " $(cat _DIR/.__mode)" \
+        " $(cat _DIR/.__timestamp)" \
+        " $(echo _DIR | cut -f2- -d_)'"
 
-        if timestamp is None:
-            data["Timestamp"].append("unk")
-            data["Active"].append(len(pids) if pids else 1)
-            data["Px"].append(None)
-            data["Avg.time"].append(None)
-            data["Time left"].append(None)
-            data["Done"].append(0)
-            data["Crashed"].append(0)
-            data["Total"].append(None if pids else 1)
+    result = subprocess.run(cmd,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            shell=True)
+
+    if result.stderr:
+        raise Exception(result.stderr.decode("utf-8"))
+
+    running_timestamps = [e.timestamp for e in experiments]
+
+    for line in result.stdout.decode("utf-8").split("\n"):
+        if not line:
             continue
+        (path, mode, tmstmp, exp) = line.split()
+        if experiment and experiment != exp:
+            continue
+        if timestamp and timestamp != tmstmp:
+            continue
+        if tmstmp in running_timestamps:
+            continue
+        experiments.append(Experiment(-1, exp, tmstmp, path, mode, [], False))
 
-        data["Timestamp"].append(timestamp)
-        data["Active"].append(len(pids))
+    return experiments
 
-        exp_dirs = [d for d in os.listdir('results') if timestamp in d]
-        assert len(exp_dirs) == 1
-        exp_dir = exp_dirs[0]
 
-        total, done, crashed, active = 0, 0, 0, 0
+def display_progress(experiments: List[Experiment]):
+    headers = ["PID", "Timestamp", "Experiment",
+               "Running", "Done", "Crashed", "Lost", "Total", "Success",
+               "Px", "Avg.time", "Time left"]
+    exp_info = {info: [] for info in headers}
+
+    for experiment in experiments:
+        exp_info["PID"].append(experiment.ppid)
+        exp_info["Timestamp"].append(experiment.timestamp)
+        exp_info["Experiment"].append(
+            clr(experiment.experiment, 'yellow', attrs=['bold']))
+
+        if experiment.is_running:
+            if experiment.mode == "single":
+                running = 1
+            else:
+                running = len(experiment.pids)
+        else:
+            running = 0
+
+        total, success, crashed, active = 0, 0, 0, 0
         total_time, active_elapsed = 0, 0
         min_time = None
-        for rel_path, dirs, files in os.walk(os.path.join('results', exp_dir)):
+        max_time = None
+        for rel_path, dirs, files in os.walk(experiment.root_path):
             if not dirs:
                 total += 1
                 # os.path.join('results', exp_dir, rel_path)
@@ -183,66 +179,118 @@ def display_progress(experiments: List[Tuple[PID, Optional[Timestamp], str, List
                         if min_time is None or min_time > start_time:
                             min_time = start_time
                     if ".__end" in files:
-                        done += 1
+                        success += 1
                         with open(os.path.join(run_path, ".__end")) as e_file:
                             end_time = int(e_file.readline().strip())
+                        if max_time is None or max_time < end_time:
+                            max_time = end_time
                         total_time += end_time - start_time
                     elif ".__crash" in files:
                         crashed += 1
                         with open(os.path.join(run_path, ".__crash")) as e_file:
                             end_time = int(e_file.readline().strip())
+                        if max_time is None or max_time < end_time:
+                            max_time = end_time
                         total_time += end_time - start_time
                     else:
                         active += 1
                         active_elapsed += int(time.time()) - start_time
 
-        wall_time = int(time.time()) - min_time
-        total_run_time = total_time + active_elapsed
-        factor = float(total_run_time) / wall_time
-        data["Px"].append(factor)
-        if done + crashed > 0:
-            avg_time = float(total_time) / (done + crashed)
-            data["Avg.time"].append(avg_time)
-            left_no = total - done - crashed
-            data["Time left"].append(
-                (left_no * avg_time - active_elapsed) / factor)
+        done = crashed + success
+        lost = active - running
+
+        if running > 0:
+            wall_time = int(time.time()) - min_time
+        elif min_time and max_time:
+            wall_time = max_time - min_time
         else:
-            data["Avg.time"].append(None)
-            data["Time left"].append(None)
+            wall_time = 0
 
-        data["Done"].append(done)
-        data["Crashed"].append(crashed)
-        data["Total"].append(total)
+        total_run_time = total_time + active_elapsed
+        if wall_time > 0 and lost == 0:
+            factor = float(total_run_time) / wall_time
+        else:
+            factor = None
+        exp_info["Px"].append(factor)
 
-    if data['Active']:
-        f_a = max(len(f'{a: d}') for a in data['Active'])
-        f_c = max(len(f'{c: d}') for c in data['Crashed'])
-        f_d = max(len(f'{d: d}') for d in data['Done'])
+        if done + crashed > 0:
+            avg_time = float(total_time) / done
+            exp_info["Avg.time"].append(avg_time)
+            left_no = total - done
+            if factor and factor > 0 and lost == 0:
+                exp_info["Time left"].append(
+                    (left_no * avg_time - active_elapsed) / factor)
+            else:
+                exp_info["Time left"].append(None)
+        else:
+            exp_info["Avg.time"].append(None)
+            exp_info["Time left"].append(None)
 
-    acd = zip(data["Active"], data["Crashed"], data["Done"])
+        exp_info["Running"].append(running)
+        exp_info["Crashed"].append(crashed)
+        exp_info["Lost"].append(lost)
+        exp_info["Success"].append(success)
+        exp_info["Done"].append(done)
+        exp_info["Total"].append(total)
 
-    data["Active/Crashed/Done"] = [f"{clr(f'{a: {f_a}d}', 'yellow'):s} /"
-                                   f" {clr(f'{c: {f_c}d}', 'red'):s} / "
-                                   f"{clr(f'{d: {f_d}d}', 'green'):s}"
-                                   for (a, c, d) in acd]
+    fkey = f"{clr('R', 'yellow'):s} + "\
+        f"{clr('C', 'red'):s} + "\
+        f"{clr('L', 'blue'):s} + "\
+        f"{clr('S', 'green', attrs=['bold']):s} = "\
+        f"{clr('Done', attrs=['bold']):s} / "\
+        f"{clr('Total', attrs=['bold']):s}"
 
-    del data["Active"]
-    del data["Crashed"]
-    del data["Done"]
+    if exp_info["Running"]:
+        f_r = max(len(f'{r:d}') for r in exp_info['Running'])
+        f_c = max(len(f'{c:d}') for c in exp_info['Crashed'])
+        f_l = max(len(f'{l:d}') for l in exp_info['Lost'])
+        f_s = max(len(f'{s:d}') for s in exp_info['Success'])
+        f_d = max(len(f'{d:d}') for d in exp_info['Done'])
+        f_t = max(len(f'{t:d}') for t in exp_info['Total'])
 
-    o_data = OrderedDict([(key, data[key]) for key in
-                          ["PID", "Timestamp", "Experiment", "Active/Crashed/Done",
-                           "Total", "Px", "Avg.time", "Time left"]])
+        counts = zip(*[exp_info[l]
+                       for l in ["Running", "Crashed", "Lost", "Success",
+                                 "Done", "Total"]])
+
+        exp_info[fkey] = [f"{clr(f'{r:{f_r}d}', 'yellow'):s} + "
+                          f"{clr(f'{c:{f_c}d}', 'red'):s} + "
+                          f"{clr(f'{l:{f_l}d}', 'blue'):s} + "
+                          f"{clr(f'{s:{f_s}d}', 'green', attrs=['bold']):s} = "
+                          f"{clr(f'{d:{f_d}d}', attrs=['bold']):s} / "
+                          f"{clr(f'{t:{f_t}d}', attrs=['bold']):s}"
+                          for (r, c, l, s, d, t) in counts]
+    else:
+        exp_info[fkey] = []
+
+    del exp_info["Running"]
+    del exp_info["Crashed"]
+    del exp_info["Lost"]
+    del exp_info["Success"]
+    del exp_info["Done"]
+    del exp_info["Total"]
+
+    headers = ["PID", "Timestamp", "Experiment",
+               fkey,
+               "Px", "Avg.time", "Time left"]
+
+    o_data = OrderedDict([(key, exp_info[key]) for key in headers])
 
     print(tabulate.tabulate(o_data, headers="keys"))
+    print('--')
+    print(f"{clr('R', 'yellow'):s} = {clr('Running', 'yellow'):s}; "
+          f"{clr('C', 'red'):s} = {clr('Crashed', 'red'):s} "
+          f"{clr('L', 'blue'):s} = {clr('Lost', 'blue'):s}; "
+          f"{clr('S', 'green', attrs=['bold']):s} = "
+          f"{clr('Success', 'green', attrs=['bold']):s}")
+    print("If there are lost experiments, 'Px', and 'Time left' might be wrong.")
 
 
-def ask_user(experiments, to_kill):
+def ask_user(experiments: List[Experiment], to_kill: List[PID]):
     display_progress(experiments)
     b_to_kill = [clr(t, 'yellow', attrs=['bold']) for t in to_kill]
     answer = str(input(f"\nAre you sure you want to kill "
                        f"{', '.join(b_to_kill):s}?"
-                       f"(y/n): ")).lower().strip()
+                       f" (y/n): ")).lower().strip()
     try:
         if answer[0] == 'y':
             return True
@@ -254,45 +302,49 @@ def ask_user(experiments, to_kill):
         return ask_user(experiments, to_kill)
 
 
-def kill_all(ppid: PID, timestamp: Timestamp):
-    assert ppid > 1 and timestamp
-
-    cmd = f"kill {ppid:d}"
+def kill_all(experiment: Experiment):
+    cmd = f"kill {experiment.ppid:d}"
     result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
     if result.stderr:
-        print("Something went wrong: ")
-        print(result.stderr.decode("utf-8"))
+        raise Exception(result.stderr.decode("utf-8"))
+
+    if experiment.mode in ["single", "multiprocess"]:
+        return
 
     cmd = f"for p in `pgrep -f '"
-    cmd += f"\\-\\-timestamp {timestamp:s}"
-    cmd += f" \\-\\-ppid {ppid:d}'`; do kill $p; done"
+    cmd += f"\\-\\-timestamp {experiment.timestamp:s}"
+    cmd += f" \\-\\-ppid {experiment.ppid:d}'`; do kill $p; done"
 
     result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
     if result.stderr:
-        print("Something went wrong: ")
-        print(result.stderr.decode("utf-8"))
+        raise Exception(result.stderr.decode("utf-8"))
 
 
 def status()-> None:
     args = parse_args()
-    experiments = get_status(args.timestamp, args.experiment)
+    if not args.all:
+        experiments = get_running_liftoffs(args.timestamp, args.experiment)
+    else:
+        experiments = get_all_from_results(args.timestamp, args.experiment)
     display_progress(experiments)
 
 
 def abort() -> None:
     args = parse_args()
-    experiments = get_status(args.timestamp, args.experiment)
+    experiments = get_running_liftoffs(args.timestamp, args.experiment)
     if len(experiments) > 1 and not args.all:
-        latest_tmstmp = max(t for (_ppid, t, _exp, _pids) in experiments)
+        latest_tmstmp = max(e.timestamp for e in experiments)
         to_kill = [latest_tmstmp]
     else:
-        to_kill = [t for (_ppid, t, _exp, _pids) in experiments]
+        to_kill = [e.timestamp for e in experiments]
+
+    if not to_kill:
+        print("Nothing to murder here.")
+        return
 
     if ask_user(experiments, to_kill):
-        for ppid, timestamp, _experiment, _pids in experiments:
-            if timestamp in to_kill:
-                kill_all(ppid, timestamp)
-
-
-if __name__ == "__main__":
-    status()
+        for exp in experiments:
+            if exp.timestamp in to_kill:
+                print(f"Killing {exp.experiment:s}_{exp.timestamp:s} "
+                      f"(PID={exp.ppid:d})!")
+                kill_all(exp)

@@ -40,7 +40,12 @@ def parse_args() -> Args:
         default=False,
         action="store_true",
         dest="resume",
-        help="Resume last experiment.")
+        help="Resume last experiment or that indicated by timestamp.")
+    arg_parser.add_argument(
+        '--timestamp',
+        type=str,
+        dest="timestamp",
+        help="Timestamp of experiment to resume.")
     arg_parser.add_argument(
         "-p", "--procs-no",
         default=4,
@@ -171,7 +176,8 @@ def get_function(args: Args) -> Callable[[Args], None]:
     if module_name.endswith(".py"):
         module_name = module_name[:-3]
     module = import_module(module_name)
-    assert "run" in module.__dict__, "Module must have function run(args)."
+    if "run" not in module.__dict__:
+        raise Exception("Module must have function run(args).")
     return partial(wrapper, module.__dict__["run"])
 
 
@@ -180,8 +186,11 @@ def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
     # Figure out what should be executed
     function = get_function(args)
 
-    assert not args.gpus, "Cannot specify GPUs unless you detach processes"
-    assert args.procs_no >= 1, f"Strange number of procs: {args.procs_no:d}"
+    if args.gpus:
+        raise Exception("Cannot specify GPUs unless you detach processes")
+
+    if args.procs_no < 1:
+        raise Exception(f"Strange number of procs: {args.procs_no:d}")
 
     class NoDaemonProcess(multiprocessing.Process):
         """
@@ -240,7 +249,7 @@ def launch(py_file: str,
           f" || date +%s > {os.path.join(exp_args.out_dir, '.__crash'):s}'" +\
           f" 1> /dev/null 2> /dev/null" +\
           f" & echo $!"
-    #f" & ps --ppid $! -o pid h"
+    # f" & ps --ppid $! -o pid h"
 
     if mkl and mkl > 0:
         cmd = f"MKL_NUM_THREADS={mkl:d} {cmd:s}"
@@ -304,7 +313,8 @@ def run_from_system(root_path: str, timestamp: int,
     epg = args.per_gpu
     py_file = args.module
     py_file = py_file if py_file.endswith(".py") else py_file + ".py"
-    assert os.path.isfile(py_file)
+    if not os.path.isfile(py_file):
+        raise FileNotFoundError("Could not find {py_file:s}.")
 
     exp_args = get_exp_args(cfgs, root_path, args.runs_no)
     env = value_of(args, "env", None)
@@ -368,26 +378,55 @@ def main():
     cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
 
     root_path: str = None
-    timestamp: int
-    if args.resume:
-        experiment = cfg0.experiment
-        previous = [f for f in os.listdir("./results/")
-                    if re.match(f"\\d+_{experiment:s}", f)]
-        if previous:
-            last_time = str(max([int(f.split("_")[0]) for f in previous]))
-            print("Resuming", last_time, "!")
-            root_path = os.path.join("results",
-                                     f"{last_time:s}_{experiment:s}")
-            timestamp = int(last_time)
-            assert os.path.isdir(root_path)
+    timestamp: Optional[int] = None
+    if hasattr(args, "experiment"):
+        timestamp = int(args.timestamp)
 
-    if root_path is None:
+    if args.resume:
+        # -------------------- RESUMING A PREVIOUS EXPERIMENT --------------------
+        experiment = cfg0.experiment
+        if timestamp:
+            previous = [f for f in os.listdir("./results/")
+                        if f.startswith(str(timestamp))
+                        and f.endswith(experiment)]
+            if not previous:
+                raise Exception(
+                    f"No previous experiment with timestamp {timestamp:d}.")
+        else:
+            previous = [f for f in os.listdir("./results/")
+                        if re.match(f"\\d+_{experiment:s}", f)]
+            if not previous:
+                raise Exception(f"No previous experiment {experiment:s}.")
+
+        last_time = str(max([int(f.split("_")[0]) for f in previous]))
+        print("Resuming", last_time, "!")
+        root_path = os.path.join("results", f"{last_time:s}_{experiment:s}")
+        timestamp = int(last_time)
+        if not os.path.isdir(root_path):
+            raise Exception(f"{root_path:s} is not a folder.")
+        with open(os.path.join(root_path, ".__timestamp"), "r") as t_file:
+            if t_file.readline().strip() != timestamp:
+                raise Exception(f"{root_path:s} has the wrong timestamp.")
+
+        with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
+            ppid_file.write(f"{os.getpid():d}\n")
+    else:
+        # -------------------- STARTING A NEW EXPERIMENT --------------------
         timestamp = int(time.time())
         root_path = f"results/{timestamp:d}_{cfg0.experiment:s}/"
-        assert not os.path.exists(root_path)
+        while os.path.exists(root_path):
+            timestamp = int(time.time())
+            root_path = f"results/{timestamp:d}_{cfg0.experiment:s}/"
         os.makedirs(root_path)
+        with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
+            t_file.write(f"{timestamp:d}\n")
+        with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
+            ppid_file.write(f"{os.getpid():d}\n")
 
     if len(cfgs) == 1 and args.runs_no == 1:
+        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+            m_file.write("single\n")
+
         cfg = cfgs[0]
 
         # Check if .__end file is already there (experiment is over)
@@ -405,8 +444,12 @@ def main():
         cfg.out_dir, cfg.run_id = root_path, 0
         get_function(args)(cfg)
     elif args.no_detach:
+        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+            m_file.write("multiprocess\n")
         spawn_from_here(root_path, cfgs, args)
     else:
+        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+            m_file.write("nohup\n")
         run_from_system(root_path, timestamp, cfgs, args)
 
 
