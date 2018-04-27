@@ -88,6 +88,12 @@ def parse_args() -> Args:
         dest="omp",
         default=0,
         help="Set OMP_NUM_THREADS. -1 not to change it.")
+    arg_parser.add_argument(
+        "--comment",
+        type=str,
+        dest="comment",
+        default=0,
+        help="Short comment")
     return arg_parser.parse_known_args()[0]
 
 
@@ -229,6 +235,7 @@ def launch(py_file: str,
            exp_args: Args,
            timestamp: int,
            ppid: int,
+           root_path: str,
            env: Optional[str],
            gpu: Optional[int] = None,
            omp: Optional[int] = 0,
@@ -247,7 +254,8 @@ def launch(py_file: str,
           f" 2>{err_path:s} 1>{out_path:s}" +\
           f" && date +%s > {os.path.join(exp_args.out_dir, '.__end'):s}" +\
           f" || date +%s > {os.path.join(exp_args.out_dir, '.__crash'):s}'" +\
-          f" 1> /dev/null 2> /dev/null" +\
+          f" 1> {os.path.join(root_path, 'nohup_out')}" +\
+          f" 2> {os.path.join(root_path, 'nohup_err')}" +\
           f" & echo $!"
     # f" & ps --ppid $! -o pid h"
 
@@ -327,7 +335,7 @@ def run_from_system(root_path: str, timestamp: int,
                     gpu = gpu_j
                     break
             next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, timestamp, crt_pid,
+            new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
                              env, gpu=gpu, omp=args.omp, mkl=args.mkl)
             active_procs.append((new_pid, gpu))
             dump_pids(root_path, [pid for (pid, _) in active_procs])
@@ -408,8 +416,6 @@ def main():
             if t_file.readline().strip() != timestamp:
                 raise Exception(f"{root_path:s} has the wrong timestamp.")
 
-        with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
-            ppid_file.write(f"{os.getpid():d}\n")
     else:
         # -------------------- STARTING A NEW EXPERIMENT --------------------
         timestamp = int(time.time())
@@ -420,8 +426,12 @@ def main():
         os.makedirs(root_path)
         with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
             t_file.write(f"{timestamp:d}\n")
-        with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
-            ppid_file.write(f"{os.getpid():d}\n")
+
+    with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
+        ppid_file.write(f"{os.getpid():d}\n")
+    if args.comment:
+        with open(os.path.join(root_path, ".__comment"), "w") as comment_file:
+            comment_file.write(args.comment)
 
     if len(cfgs) == 1 and args.runs_no == 1:
         with open(os.path.join(root_path, ".__mode"), "w") as m_file:

@@ -33,8 +33,8 @@ def parse_args() -> Args:
         "-t", "--timestamp", type=str, dest="timestamp",
         help="Get by timestamp.")
     arg_parser.add_argument(
-        "-n", "--no-action", action="store_true", dest="no_action",
-        help="Display commands, but take do not execute them.")
+        "-s", "--short", action="store_true", dest="short",
+        help="Display short table.")
 
     return arg_parser.parse_args()
 
@@ -45,8 +45,7 @@ def get_running_liftoffs(timestamp: Optional[str],
                          experiment: Optional[str])-> List[Experiment]:
 
     cmd = "COLUMNS=0 pgrep liftoff" \
-        " | xargs -r -n 1 grep -f results/*/.__ppid -e" \
-        " | cut -f 1 -d':'" \
+        " | xargs -r -n 1 grep --files-with-matches results/*/.__ppid -e" \
         " | xargs -n 1 -r dirname" \
         " | xargs -n 1 -r -I_DIR -- " \
         "sh -c 'echo _DIR" \
@@ -144,10 +143,11 @@ def get_all_from_results(timestamp: Optional[str],
     return experiments
 
 
-def display_progress(experiments: List[Experiment]):
+def display_progress(experiments: List[Experiment], short=False):
     headers = ["PID", "Timestamp", "Experiment",
                "Running", "Done", "Crashed", "Lost", "Total", "Success",
-               "Px", "Avg.time", "Time left"]
+               "Px", "Avg.time", "Time left",
+               "Obs"]
     exp_info = {info: [] for info in headers}
 
     for experiment in experiments:
@@ -155,6 +155,11 @@ def display_progress(experiments: List[Experiment]):
         exp_info["Timestamp"].append(experiment.timestamp)
         exp_info["Experiment"].append(
             clr(experiment.experiment, 'yellow', attrs=['bold']))
+
+        comment_file_path = os.path.join(experiment.root_path, ".__comment")
+        if os.path.isfile(comment_file_path):
+            with open(comment_file_path, "r") as comment_file:
+                exp_info["Obs"].append(comment_file.read())
 
         if experiment.is_running:
             if experiment.mode == "single":
@@ -269,9 +274,18 @@ def display_progress(experiments: List[Experiment]):
     del exp_info["Done"]
     del exp_info["Total"]
 
-    headers = ["PID", "Timestamp", "Experiment",
-               fkey,
-               "Px", "Avg.time", "Time left"]
+    if not any(x for x in exp_info["Obs"]):
+        del exp_info["Obs"]
+
+    if short:
+        headers = ["Timestamp", "Experiment", fkey]
+    else:
+        headers = ["PID", "Timestamp", "Experiment",
+                   fkey,
+                   "Px", "Avg.time", "Time left"]
+
+    if "Obs" in exp_info:
+        headers.append("Obs")
 
     o_data = OrderedDict([(key, exp_info[key]) for key in headers])
 
@@ -326,7 +340,7 @@ def status()-> None:
         experiments = get_running_liftoffs(args.timestamp, args.experiment)
     else:
         experiments = get_all_from_results(args.timestamp, args.experiment)
-    display_progress(experiments)
+    display_progress(experiments, short=args.short)
 
 
 def abort() -> None:
