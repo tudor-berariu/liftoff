@@ -192,7 +192,9 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             else:
                 print(f"Read {config_file:s}.")
 
-    assert len(set([cfg.experiment for cfg in cfgs])) == 1, \
-        "All configs must be part of the same experiment"
+    if len(set([cfg.experiment for cfg in cfgs])) != 1:
+        raise Exception("All configs must be part of the same experiment")
 
-    return cfgs[0] if len(cfgs) == 1 else cfgs
+    if len(cfgs) == 1:
+        return cfgs[0]
+    return cfgs
