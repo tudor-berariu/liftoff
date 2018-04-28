@@ -44,6 +44,9 @@ def parse_args() -> Args:
 def get_running_liftoffs(timestamp: Optional[str],
                          experiment: Optional[str])-> List[Experiment]:
 
+    if not os.listdir('results'):
+        return []
+
     cmd = "COLUMNS=0 pgrep liftoff" \
         " | xargs -r -n 1 grep --files-with-matches results/*/.__ppid -e" \
         " | xargs -n 1 -r dirname" \
@@ -173,8 +176,8 @@ def display_progress(experiments: List[Experiment], short=False):
         total_time, active_elapsed = 0, 0
         min_time = None
         max_time = None
-        for rel_path, dirs, files in os.walk(experiment.root_path):
-            if not dirs:
+        for rel_path, _, files in os.walk(experiment.root_path):
+            if ".__leaf" in files:
                 total += 1
                 # os.path.join('results', exp_dir, rel_path)
                 run_path = rel_path
