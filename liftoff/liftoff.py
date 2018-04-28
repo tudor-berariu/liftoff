@@ -130,7 +130,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                 new_cfg.out_dir = exp_path
                 new_cfg.cfg_dir = exp_path
                 exp_args.append(new_cfg)
-
+                open(os.path.join(exp_path, ".__leaf"), "a").close()
                 cfg_file = os.path.join(exp_path, "cfg.yaml")
                 if not os.path.isfile(cfg_file):
                     with open(cfg_file, "w") as yaml_file:
@@ -148,7 +148,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                 new_cfg.out_dir = alg_path
                 new_cfg.cfg_dir = alg_path
                 exp_args.append(new_cfg)
-
+                open(os.path.join(alg_path, ".__leaf"), "a").close()
                 cfg_file = os.path.join(alg_path, "cfg.yaml")
                 if not os.path.isfile(cfg_file):
                     with open(cfg_file, "w") as yaml_file:
@@ -451,6 +451,7 @@ def main():
             with open(cfg_file, "w") as yaml_file:
                 yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
                                default_flow_style=False)
+        open(os.path.join(root_path, ".__leaf"), "a").close()
         cfg.out_dir, cfg.run_id = root_path, 0
         get_function(args)(cfg)
     elif args.no_detach:
