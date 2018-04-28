@@ -1,9 +1,16 @@
 # liftoff #
 
-  - launch multiple local experiments using `liftoff`;
+  - launch local experiments using `liftoff`;
+    * launch single runs: `liftoff smart_example.py -c diff`
+	* launch multiple runs of the same configuration `liftoff smart_example.py --runs-no 10 --procs-no 3`
+	* launch batches of experiments: `liftoff -e test_experiment --gpus 0,1 --per-gpu 2 --procs-no 4`
   - prepare batches of experiments using `liftoff-prepare`;
+    * generate configs: `liftoff-prepare test_experiment`
+  - see the status of all running experiments: `liftoff-status`
+  - see all prevoius experiments: `liftoff-status -a`
+  - get paths to all dumped files using `collect_results` from `liftoff.liftoff_results`
   - read and parse config files using `read_config` from `liftoff.config` ;
-
+  - kill running experiments using `liftoff-abort` (no worries, it asks you first)
 
 ## Configuration files ##
 
@@ -15,6 +22,7 @@
     - one with a default configuration
 	- another one that specifiies what should be changed
   - you might want to run batches of experiments
+    - each experiment will be configured in his own folder
 
 
 #### Reading configurations ####
