@@ -113,7 +113,7 @@ def get_running_liftoffs(timestamp: Optional[str],
 def get_all_from_results(timestamp: Optional[str],
                          experiment: Optional[str])-> List[Experiment]:
     experiments = get_running_liftoffs(timestamp, experiment)
-    cmd = "COLUMNS=0 find results/*/.__timestamp" \
+    cmd = "COLUMNS=0 find results/*/.__timestamp 2>/dev/null" \
         " | xargs -n 1 -r dirname" \
         " | xargs -n 1 -r -I_DIR -- " \
         "sh -c 'echo _DIR" \
