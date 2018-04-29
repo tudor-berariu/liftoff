@@ -174,7 +174,7 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             if args.experiment:
                 cfg.experiment = args.experiment
             else:
-                cfg.experiment = args.default_config_file
+                cfg.experiment = config_file[:-5]
         if not hasattr(cfg, "title"):
             cfg.title = config_file[:-5]  # lose .yaml
 
