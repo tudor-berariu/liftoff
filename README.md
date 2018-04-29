@@ -12,6 +12,98 @@
   - read and parse config files using `read_config` from `liftoff.config` ;
   - kill running experiments using `liftoff-abort` (no worries, it asks you first)
 
+
+## Short tutorial on using `liftoff` ##
+
+After installing `liftoff` go to `./examples/`.
+
+```cd examples```
+
+Remove all previous results:
+
+```rm -r results/*```
+
+### The test script ###
+
+The test script is called `smart_example.py`. It takes three numbers
+and adds them together. The arguments are expected in a `Namespace`
+with this structure:
+
+```Namespace(x=2, yz=Namespace(y=3,z=4))```
+
+The script sleeps for some seconds and the prints the sum of those
+numbers.
+
+### Monitoring liftoff processes ###
+
+Split your terminal and run:
+
+```watch -c -n 1 liftoff-status -a```
+
+Observe running liftoff experiments there as we go through this tutorial.
+
+### Run it once ###
+
+`liftoff` is useful even when you run a single script once. It reads
+the config file for you and then calls the function `run` from that
+module.
+
+Run the following command:
+
+```liftoff smart_example.py```
+
+The above command is equivalent to:
+
+```liftoff smart_example.py --default-config-file default --config-file default```
+
+You should see the experiment listed by `liftoff-status`.
+
+### Run a small variation ###
+
+In `configs/default.yaml` there are several variables
+declared. Imagine you just want to change a few of them from your
+default configuration of the experiment.
+
+File `config/diff.yaml` sets different values for `x` and `z`. Run
+
+```liftoff smart_example.py -c diff```
+
+### Run the same configuration several times ###
+
+Running:
+
+```liftoff smart_example.py --runs-no 4 --procs-no 1```
+
+will just run the above script with the default configuration several
+times. Each run will be run in a separate process. But running all
+processes in a sequence is not always what you want. `liftoff` can
+manage parallel executions for you.
+
+```liftoff smart_example.py --runs-no 40 --procs-no 20```
+
+If you have multiple GPUs, you can even limit the maximum number of
+concurrent experiments on a single GPU. Running:
+
+```liftoff smart_example.py --runs-no 40 --procs-no 20 --gpus 0,1,2,3 --per-gpu 2```
+
+will allow no more than 2 experiments on each GPU, so even if
+`procs-no` is 20, the maximum number of experiments running in
+parallel will be 8.
+
+### Run batches of experiments ###
+
+Sometimes you want to test several combinations of values for multiple
+hyperparameters. `liftoff` does that for you.
+
+See that in folder `./configs/test_experiment/` there are two files:
+the default configuration `default.yaml` and a file that specifies
+multiple values for some variables: `config.yaml`.
+
+First run ```liftoff-prepare test_experiment``` to generate all config
+files. Run `ls configs/test_experiment/` to see what has been generated.
+
+Now run ```liftoff -e test_experiment``` to run all those variations.
+
 ## Configuration files ##
 
 #### Assumptions ####

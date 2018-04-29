@@ -11,8 +11,8 @@ def run(args: Namespace) -> None:
     print(f"[{args.run_id:d}] Got this:", config_to_string(args), flush=True)
     print(f"Computing {args.x:d} + {args.yz.y:d} + {args.yz.z:d} = ",
           end="", flush=True)
-    for i in range(5):
-        sleep(randint(1, 5))
+    for i in range(4):
+        sleep(randint(1, 4))
         open(os.path.join(args.out_dir, f"step__{i:d}__results"), "w").close()
     print(f"... ", end="", flush=True)
     if randint(1, 10) % 7 == 0:
