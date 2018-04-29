@@ -102,7 +102,22 @@ multiple values for some variables: `config.yaml`.
 First run ```liftoff-prepare test_experiment``` to generate all config
 files. Run `ls configs/test_experiment/` to see what has been generated.
 
-Now run ```liftoff -e test_experiment``` to run all those variations.
+Now run ```liftoff smart_example.py -e test_experiment --coment "My first experiment```
+to run all those variations.
+
+### Killing processes ###
+
+You can kill the most recent launched liftoff experiment:
+`liftoff-abort`, or the most recent one with a given name
+`liftoff-abort -e test_experiment`, or a specific one by giving its
+timestamp: `liftoff-abort -t 1524936339`.
+
+So, let's see how that works.
+
+  - launch an experiment: `nohup liftoff smart_example.py -e test_experiment --runs-no 20 &`
+  - see it running: `liftoff-status -e test_experiment`
+  - kill it: `liftoff-abort`
+
 
 ## Configuration files ##
 
