@@ -248,8 +248,22 @@ def launch(py_file: str,
     end_path = os.path.join(exp_args.out_dir, '.__end')
     crash_path = os.path.join(exp_args.out_dir, '.__crash')
 
+    env_vars = ""
+
+    if mkl and mkl > 0:
+        env_vars = f"MKL_NUM_THREADS={mkl:d} {env_vars:s}"
+
+    if omp and omp > 0:
+        env_vars = f"OMP_NUM_THREADS={omp:d} {nev_vars:s}"
+
+    if gpu is not None:
+        env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
+
+    if env:
+        env_vars = f"source activate {env:s}; {env_vars:s}"
+
     cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
-          f" nohup sh -c 'python -u {py_file:s}" +\
+          f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
           f" --configs-dir {exp_args.cfg_dir:s}" +\
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
@@ -262,18 +276,6 @@ def launch(py_file: str,
           f" 2> {os.path.join(root_path, 'nohup_err')}" +\
           f" & echo $!"
     # f" & ps --ppid $! -o pid h"
-
-    if mkl and mkl > 0:
-        cmd = f"MKL_NUM_THREADS={mkl:d} {cmd:s}"
-
-    if omp and omp > 0:
-        cmd = f"OMP_NUM_THREADS={omp:d} {cmd:s}"
-
-    if gpu is not None:
-        cmd = f"CUDA_VISIBLE_DEVICES={gpu:d} {cmd:s}"
-
-    if env:
-        cmd = f"source activate {env:s}; {cmd:s}"
 
     print(f"Command to be run:\n{cmd:s}")
 
