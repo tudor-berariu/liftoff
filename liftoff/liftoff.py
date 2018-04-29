@@ -254,7 +254,7 @@ def launch(py_file: str,
         env_vars = f"MKL_NUM_THREADS={mkl:d} {env_vars:s}"
 
     if omp and omp > 0:
-        env_vars = f"OMP_NUM_THREADS={omp:d} {nev_vars:s}"
+        env_vars = f"OMP_NUM_THREADS={omp:d} {env_vars:s}"
 
     if gpu is not None:
         env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
