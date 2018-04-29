@@ -92,7 +92,7 @@ def parse_args() -> Args:
         "--comment",
         type=str,
         dest="comment",
-        default=0,
+        default="",
         help="Short comment")
     return arg_parser.parse_known_args()[0]
 
@@ -171,7 +171,7 @@ def wrapper(function: Callable[[Args], None], args: Args) -> None:
         systime_to(start_file)
         function(args)
         systime_to(end_file)
-    except:
+    except Exception:
         traceback.print_exc(file=sys.stderr)
         systime_to(crash_file)
 
@@ -244,7 +244,11 @@ def launch(py_file: str,
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
-    cmd = f" date +%s 1> {os.path.join(exp_args.out_dir, '.__start'):s} 2>/dev/null &&" +\
+    start_path = os.path.join(exp_args.out_dir, '.__start')
+    end_path = os.path.join(exp_args.out_dir, '.__end')
+    crash_path = os.path.join(exp_args.out_dir, '.__crash')
+
+    cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
           f" nohup sh -c 'python -u {py_file:s}" +\
           f" --configs-dir {exp_args.cfg_dir:s}" +\
           f" --config-file cfg" +\
@@ -252,8 +256,8 @@ def launch(py_file: str,
           f" --out-dir {exp_args.out_dir:s}" +\
           f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
-          f" && date +%s > {os.path.join(exp_args.out_dir, '.__end'):s}" +\
-          f" || date +%s > {os.path.join(exp_args.out_dir, '.__crash'):s}'" +\
+          f" && date +%s > {end_path:s}" +\
+          f" || date +%s > {crash_path:s}'" +\
           f" 1> {os.path.join(root_path, 'nohup_out')}" +\
           f" 2> {os.path.join(root_path, 'nohup_err')}" +\
           f" & echo $!"
@@ -391,7 +395,7 @@ def main():
         timestamp = int(args.timestamp)
 
     if args.resume:
-        # -------------------- RESUMING A PREVIOUS EXPERIMENT --------------------
+        # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
         experiment = cfg0.experiment
         if timestamp:
             previous = [f for f in os.listdir("./results/")
