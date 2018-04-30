@@ -303,7 +303,13 @@ def display_progress(experiments: List[Experiment], args: Args = None):
     if args and args.sort:
         column = WHAT_TO_SORT[args.sort]
         values = exp_info[column]
-        sorted_values = sorted(enumerate(values), key=lambda x: x[1])
+        if column in ["T", "Avg.time", "Done", "Px"]:
+            def key(x):
+                return x[1] if x[1] else float("inf")
+        else:
+            def key(x):
+                return x[1] if x[1] is not None else ""
+        sorted_values = sorted(enumerate(values), key=key)
         new_indices = [idx for (idx, _) in sorted_values]
         exp_info = {key: [values[i] for i in new_indices]
                     for (key, values) in exp_info.items()}
