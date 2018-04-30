@@ -33,8 +33,11 @@ def parse_args() -> Args:
         "-t", "--timestamp", type=str, dest="timestamp",
         help="Get by timestamp.")
     arg_parser.add_argument(
-        "-s", "--short", action="store_true", dest="short",
+        "-r", "--resumed", action="store_true", dest="short",
         help="Display short table.")
+    arg_parser.add_argument(
+        "-s", "--sort", dest="sort", default=None,
+        help="Sort by column.")
 
     return arg_parser.parse_args()
 
@@ -110,6 +113,9 @@ def get_running_liftoffs(timestamp: Optional[str],
     return running
 
 
+WHAT_TO_SORT = {"time": "Avg.time"}
+
+
 def get_all_from_results(timestamp: Optional[str],
                          experiment: Optional[str])-> List[Experiment]:
     experiments = get_running_liftoffs(timestamp, experiment)
@@ -146,10 +152,10 @@ def get_all_from_results(timestamp: Optional[str],
     return experiments
 
 
-def display_progress(experiments: List[Experiment], short=False):
+def display_progress(experiments: List[Experiment], args: Args = None):
     headers = ["PID", "Timestamp", "Experiment",
                "Running", "Done", "Crashed", "Lost", "Total", "Success",
-               "Px", "Avg.time", "Time left",
+               "Px", "Avg.time", "T", "Time left",
                "Obs"]
     exp_info = {info: [] for info in headers}
 
@@ -228,11 +234,14 @@ def display_progress(experiments: List[Experiment], short=False):
             if factor and factor > 0 and lost == 0:
                 exp_info["Time left"].append(
                     (left_no * avg_time - active_elapsed) / factor)
+                exp_info["T"].append(avg_time / factor)
             else:
                 exp_info["Time left"].append(None)
+                exp_info["T"].append(None)
         else:
             exp_info["Avg.time"].append(None)
             exp_info["Time left"].append(None)
+            exp_info["T"].append(None)
 
         exp_info["Running"].append(running)
         exp_info["Crashed"].append(crashed)
@@ -241,12 +250,12 @@ def display_progress(experiments: List[Experiment], short=False):
         exp_info["Done"].append(done)
         exp_info["Total"].append(total)
 
-    fkey = f"{clr('R', 'yellow'):s} + "\
-        f"{clr('C', 'red'):s} + "\
-        f"{clr('L', 'blue'):s} + "\
-        f"{clr('S', 'green', attrs=['bold']):s} = "\
-        f"{clr('Done', attrs=['bold']):s} / "\
-        f"{clr('Total', attrs=['bold']):s}"
+    fkey = f"{clr('R', 'yellow'):s} + " \
+           f"{clr('C', 'red'):s} + " \
+           f"{clr('L', 'blue'):s} + " \
+           f"{clr('S', 'green', attrs=['bold']):s} = " \
+           f"{clr('Done', attrs=['bold']):s} / " \
+           f"{clr('Total', attrs=['bold']):s}"
 
     if exp_info["Running"]:
         f_r = max(len(f'{r:d}') for r in exp_info['Running'])
@@ -280,15 +289,23 @@ def display_progress(experiments: List[Experiment], short=False):
     if not any(x for x in exp_info["Obs"]):
         del exp_info["Obs"]
 
-    if short:
+    if args and args.short:
         headers = ["Timestamp", "Experiment", fkey]
     else:
         headers = ["PID", "Timestamp", "Experiment",
-                   fkey,
-                   "Px", "Avg.time", "Time left"]
+                   fkey, "Time left",
+                   "Px", "Avg.time", "T"]
 
     if "Obs" in exp_info:
         headers.append("Obs")
+
+    if args and args.sort:
+        column = WHAT_TO_SORT[args.sort]
+        values = exp_info[column]
+        sorted_values = sorted(enumerate(values), key=lambda x: x[1])
+        new_indices = [idx for (idx, _) in sorted_values]
+        exp_info = {key: [values[i] for i in new_indices]
+                    for (key, values) in exp_info.items()}
 
     o_data = OrderedDict([(key, exp_info[key]) for key in headers])
 
@@ -343,7 +360,7 @@ def status()-> None:
         experiments = get_running_liftoffs(args.timestamp, args.experiment)
     else:
         experiments = get_all_from_results(args.timestamp, args.experiment)
-    display_progress(experiments, short=args.short)
+    display_progress(experiments, args)
 
 
 def abort() -> None:
