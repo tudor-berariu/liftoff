@@ -113,7 +113,8 @@ def get_running_liftoffs(timestamp: Optional[str],
     return running
 
 
-WHAT_TO_SORT = {"time": "Avg.time"}
+WHAT_TO_SORT = {"time": "T",
+                "experiment": "experiment"}
 
 
 def get_all_from_results(timestamp: Optional[str],
