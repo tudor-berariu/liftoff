@@ -63,14 +63,14 @@ def parse_args(strict: bool = True) -> Namespace:
     arg_parser = ArgumentParser()
     arg_parser.add_argument(
         '-d', '--default-config-file',
-        default='default',
+        default='',
         type=str,
         dest='default_config_file',
         help='Default configuration file'
     )
     arg_parser.add_argument(
         '-c', '--config-file',
-        default=['default'],
+        default=["default"],
         type=str,
         nargs="+",
         dest='config_files',
@@ -152,7 +152,10 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
     else:
         path = args.configs_dir
         config_files = [f + ".yaml" for f in args.config_files]
-        default_config_file = args.default_config_file + ".yaml"
+        if args.default_config_file:
+            default_config_file = args.default_config_file + ".yaml"
+        else:
+            default_config_file = None
 
     cfgs: List[Namespace] = []
 
@@ -161,7 +164,7 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             config_data = yaml.load(handler, Loader=yaml.SafeLoader)
         cfg: Namespace = dict_to_namespace(config_data)
 
-        if default_config_file != config_file:
+        if default_config_file and default_config_file != config_file:
             with open(os.path.join(path, default_config_file)) as handler:
                 default_cfg_data = yaml.load(handler, Loader=yaml.SafeLoader)
             default_cfg: Namespace = dict_to_namespace(default_cfg_data)
