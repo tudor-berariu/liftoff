@@ -2,6 +2,7 @@ import os
 import time
 from argparse import ArgumentParser, Namespace
 from typing import List, Optional, NamedTuple
+import datetime
 import subprocess
 from collections import OrderedDict
 from termcolor import colored as clr
@@ -233,8 +234,11 @@ def display_progress(experiments: List[Experiment], args: Args = None):
             exp_info["Avg.time"].append(avg_time)
             left_no = total - done
             if factor and factor > 0 and lost == 0:
+                left_sec = int(
+                    round((left_no * avg_time - active_elapsed) / factor))
                 exp_info["Time left"].append(
-                    (left_no * avg_time - active_elapsed) / factor)
+                    str(datetime.timedelta(seconds=left_sec)))
+
                 exp_info["T"].append(avg_time / factor)
             else:
                 exp_info["Time left"].append(None)
