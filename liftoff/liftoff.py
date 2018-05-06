@@ -124,7 +124,9 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                         continue
                 else:
                     os.makedirs(exp_path)
-
+                crash_file = os.path.join(exp_path, ".__crash")
+                if os.path.isfile(crash_file):
+                    os.remove(crash_file)
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = run_id
                 new_cfg.out_dir = exp_path
@@ -143,6 +145,9 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
             if os.path.isfile(end_file):
                 print(f"Skipping {cfg.title:s}. {end_file:s} exists.")
             else:
+                crash_file = os.path.join(alg_path, ".__crash")
+                if os.path.isfile(crash_file):
+                    os.remove(crash_file)
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = 0
                 new_cfg.out_dir = alg_path
@@ -450,6 +455,10 @@ def main():
         if os.path.isfile(end_file):
             print(f"Skipping {cfgs[0].title:s}. {end_file:s} exists.")
             return
+
+        crash_file = os.path.join(root_path, ".__crash")
+        if os.path.isfile(crash_file):
+            os.remove(crash_file)
 
         # Dump config file if there is none
         cfg_file = os.path.join(root_path, "cfg.yaml")
