@@ -419,7 +419,7 @@ def main():
         if not os.path.isdir(root_path):
             raise Exception(f"{root_path:s} is not a folder.")
         with open(os.path.join(root_path, ".__timestamp"), "r") as t_file:
-            if t_file.readline().strip() != timestamp:
+            if int(t_file.readline().strip()) != timestamp:
                 raise Exception(f"{root_path:s} has the wrong timestamp.")
 
     else:
