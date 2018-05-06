@@ -263,3 +263,23 @@ See the `filter_out` section in
 
 
 Also, See [this project](https://github.com/tudor-berariu/lifelong-learning)
+
+
+
+## Some useful commands to use when inspecting results ##
+
+If you have several runs that ended in error but you suspect that some
+error occurs more than once, you might want to count unique crash
+reasons. Replace `<timestamp>` in the command below:
+
+
+    grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | cut -f 1 -d " " | sort | uniq -c
+
+
+The above command gives you a list of md5 sums (of `err` files) and a
+count for each. If you want to see a particular error message replace
+`<md5sum>` in the command below:
+
+
+    grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | grep <md5sum> | tail -n 1| cut -f 3 -d" " | xargs -r -n 1 -I_file -- sh -c 'echo "_file" ; cat _file'
+
