@@ -37,7 +37,10 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
     """Updates @default_cfg with values from @diff_cfg"""
 
     for key, value in diff_cfg.__dict__.items():
-        if isinstance(value, Namespace):
+        if key.startswith("_"):
+            # Keys starting with '_' are entirely overwritten
+            setattr(default_cfg, key, value)
+        elif isinstance(value, Namespace):
             if hasattr(default_cfg, key):
                 _update_config(getattr(default_cfg, key), value)
             else:
