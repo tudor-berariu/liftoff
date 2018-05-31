@@ -171,7 +171,7 @@ def combine_values(variables: Variables, values: Assignment,
 
 def main():
     args = get_args()  # type: Namespace
-    experiment = args.experiment  # type: str
+    experiment = args.experiment.strip('/')  # type: str
     exp_path, config_path = check_paths(experiment, args.force or args.clean)
 
     if args.clean:
