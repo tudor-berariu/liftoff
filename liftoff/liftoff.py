@@ -13,6 +13,7 @@ import traceback
 import subprocess
 import yaml
 from termcolor import colored as clr
+from numpy.random import shuffle
 
 from .config import read_config, namespace_to_dict, config_to_string, value_of
 from .utils.sys_interaction import systime_to
@@ -104,7 +105,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
     exp_args = []
     for j, cfg in enumerate(cfgs):
         title = cfg.title
-        for char in " -.,=:;/()[]'":
+        for char in " -.,=:;/()[]'+":
             title = title.replace(char, "_")
         while "___" in title:
             title = title.replace("___", "__")
@@ -159,7 +160,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
                     with open(cfg_file, "w") as yaml_file:
                         yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
                                        default_flow_style=False)
-
+    shuffle(exp_args)
     return exp_args
 
 

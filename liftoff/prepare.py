@@ -19,6 +19,7 @@ BadPairs = Dict[Tuple[VarId, VarId], List[Tuple[Any, Any]]]
 
 
 def get_args() -> Namespace:
+    """Read command line arguments for liftoff-prepare"""
     arg_parser = ArgumentParser("Prepare experiment for liftoff")
     arg_parser.add_argument("experiment", type=str,
                             help="Experiment to prepare")
@@ -33,6 +34,7 @@ def get_args() -> Namespace:
 
 
 def check_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
+    """Checks required files for experiment"""
     assert os.path.isdir('configs'), "configs folder is missing"
     exp_path: str = os.path.join('configs', experiment)
     assert os.path.isdir(exp_path), f"{exp_path:s} folder is missing"
@@ -158,14 +160,18 @@ def combine_values(variables: Variables, values: Assignment,
         for key in var_path[:-1]:
             parent = parent.setdefault(key, {})
         parent[var_path[-1]] = copy(value)
-        info.append(f"{names[var_id]:s}={value}")
+        name = names[var_id].strip('_')
+        if isinstance(value, dict) and "__name" in value:
+            info.append(f"{name:s}={value['__name']:s}")
+        else:
+            info.append(f"{name:s}={value}")
     crt_values["title"] = "; ".join(info)
     return crt_values
 
 
 def main():
-    args = get_args()
-    experiment = args.experiment
+    args = get_args()  # type: Namespace
+    experiment = args.experiment.strip('/')  # type: str
     exp_path, config_path = check_paths(experiment, args.force or args.clean)
 
     if args.clean:
