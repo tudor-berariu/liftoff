@@ -160,10 +160,11 @@ def combine_values(variables: Variables, values: Assignment,
         for key in var_path[:-1]:
             parent = parent.setdefault(key, {})
         parent[var_path[-1]] = copy(value)
+        name = names[var_id].strip('_')
         if isinstance(value, dict) and "__name" in value:
-            info.append(f"{names[var_id]:s}={value['__name']:s}")
+            info.append(f"{name:s}={value['__name']:s}")
         else:
-            info.append(f"{names[var_id]:s}={value}")
+            info.append(f"{name:s}={value}")
     crt_values["title"] = "; ".join(info)
     return crt_values
 
