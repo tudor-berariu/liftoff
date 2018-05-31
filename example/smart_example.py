@@ -15,7 +15,7 @@ def run(args: Namespace) -> None:
         sleep(randint(1, 4))
         open(os.path.join(args.out_dir, f"step__{i:d}__results"), "w").close()
     print(f"... ", end="", flush=True)
-    if randint(1, 10) % 7 == 0:
+    if randint(1, 8) % 7 == 0:
         _ = [][0]  # Error
     sleep(randint(1, 5))
     print(args.x + args.yz.y + args.yz.z, flush=True)
