@@ -185,10 +185,14 @@ def get_function(args: Args) -> Callable[[Args], None]:
     module_name = args.module
     if module_name.endswith(".py"):
         module_name = module_name[:-3]
+        function = "run"
+    else:
+    	module_name, function = module_name.split(".")
+
     module = import_module(module_name)
-    if "run" not in module.__dict__:
-        raise Exception("Module must have function run(args).")
-    return partial(wrapper, module.__dict__["run"])
+    if function not in module.__dict__:
+        raise Exception(f"Module must have function {function}(args).")
+    return partial(wrapper, module.__dict__[function])
 
 
 def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
