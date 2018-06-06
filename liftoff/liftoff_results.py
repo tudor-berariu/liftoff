@@ -26,6 +26,7 @@ def check(conditions: dict, config_data: dict) -> bool:
 
 def collect_results(timestamp: Optional[str] = None,
                     experiment_name: Optional[str] = None,
+                    experiment_full_name: Optional[str] = None,
                     conditions: Union[Namespace, dict] = None,
                     names: List[str] = None,
                     incomplete: bool = True) -> List[Tuple[str, List[str]]]:
@@ -64,8 +65,11 @@ def collect_results(timestamp: Optional[str] = None,
     """
 
     # --- Find the requested experiment folder
+    if experiment_full_name:
+        exp_dirs = [experiment_full_name]
+    else:
+        exp_dirs: List[str] = os.listdir('results')
 
-    exp_dirs: List[str] = os.listdir('results')
     if experiment_name:
         regex: str = f"\\d+_{experiment_name:s}"
         exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
@@ -148,4 +152,29 @@ def collect_results(timestamp: Optional[str] = None,
     return results
 
 
-__all__ = ["collect_results"]
+def collect_all_results(timestamp: Optional[str] = None,
+                        experiment_name: Optional[str] = None,
+                        conditions: Union[Namespace, dict] = None,
+                        names: List[str] = None,
+                        incomplete: bool = True) -> List[Tuple[str, List[str]]]:
+    """ 
+        Returns the list of lists of paths for all requested experiments
+        in folder 'results/' with name that match //d_*'
+    """
+
+    results = []
+
+    exp_dirs: List[str] = os.listdir('results')
+
+    regex: str = f"\\d+_.*"
+    exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
+
+    for exp_dir in exp_dirs:
+        r = collect_results(timestamp, experiment_name, exp_dir, 
+            conditions, names, incomplete)
+        if len(r) > 0:
+            results.append(r)
+    
+    return results
+
+__all__ = ["collect_results", "collect_all_results"]
