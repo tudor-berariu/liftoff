@@ -81,6 +81,8 @@ def collect_results(timestamp: Optional[str] = None,
         latest: int = 0
         dir_name = None
         for exp_dir in exp_dirs:
+            if not re.match("\\d+_.*", exp_dir):
+                continue
             exp_time = int(exp_dir.split("_")[0])
             if exp_time > latest:
                 latest, dir_name = exp_time, exp_dir
