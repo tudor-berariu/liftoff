@@ -382,7 +382,8 @@ def status()-> None:
 
 def abort() -> None:
     args = parse_args()
-    experiments = get_running_liftoffs(args.timestamp, args.experiment)
+    params = [args.timestamp, args.experiment, args.results_dir]
+    experiments = get_running_liftoffs(*params)
     if len(experiments) > 1 and not args.all:
         latest_tmstmp = max(e.timestamp for e in experiments)
         to_kill = [latest_tmstmp]
