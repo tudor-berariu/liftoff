@@ -39,6 +39,9 @@ def parse_args() -> Args:
     arg_parser.add_argument(
         "-s", "--sort", dest="sort", default=None,
         help="Sort by column.")
+    arg_parser.add_argument(
+        "-d", "--results-dir", dest="results_dir", default="results",
+        help="Results directory (default: ./results)")
 
     return arg_parser.parse_args()
 
@@ -46,13 +49,14 @@ def parse_args() -> Args:
 # -- Code for running processes
 
 def get_running_liftoffs(timestamp: Optional[str],
-                         experiment: Optional[str])-> List[Experiment]:
+                         experiment: Optional[str],
+                         results_dir: str)-> List[Experiment]:
 
-    if not os.listdir('results'):
+    if not os.listdir(results_dir):
         return []
 
     cmd = "COLUMNS=0 pgrep liftoff" \
-        " | xargs -r -n 1 grep --files-with-matches results/*/.__ppid -e" \
+        f" | xargs -r -n 1 grep --files-with-matches {results_dir:s}/*/.__ppid -e" \
         " | xargs -n 1 -r dirname" \
         " | xargs -n 1 -r -I_DIR -- " \
         "sh -c 'echo _DIR" \
@@ -119,9 +123,10 @@ WHAT_TO_SORT = {"time": "T",
 
 
 def get_all_from_results(timestamp: Optional[str],
-                         experiment: Optional[str])-> List[Experiment]:
-    experiments = get_running_liftoffs(timestamp, experiment)
-    cmd = "COLUMNS=0 find results/*/.__timestamp 2>/dev/null" \
+                         experiment: Optional[str],
+                         results_dir: str)-> List[Experiment]:
+    experiments = get_running_liftoffs(timestamp, experiment, results_dir)
+    cmd = f"COLUMNS=0 find {results_dir:s}/*/.__timestamp 2>/dev/null" \
         " | xargs -n 1 -r dirname" \
         " | xargs -n 1 -r -I_DIR -- " \
         "sh -c 'echo _DIR" \
@@ -367,10 +372,11 @@ def kill_all(experiment: Experiment):
 
 def status()-> None:
     args = parse_args()
+    params = [args.timestamp, args.experiment, args.results_dir]
     if not args.all:
-        experiments = get_running_liftoffs(args.timestamp, args.experiment)
+        experiments = get_running_liftoffs(*params)
     else:
-        experiments = get_all_from_results(args.timestamp, args.experiment)
+        experiments = get_all_from_results(*params)
     display_progress(experiments, args)
 
 
