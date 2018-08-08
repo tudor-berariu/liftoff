@@ -176,6 +176,8 @@ def display_progress(experiments: List[Experiment], args: Args = None):
         if os.path.isfile(comment_file_path):
             with open(comment_file_path, "r") as comment_file:
                 exp_info["Obs"].append(comment_file.read())
+        else:
+            exp_info["Obs"].append("")
 
         if experiment.is_running:
             if experiment.mode == "single":
