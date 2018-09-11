@@ -17,7 +17,8 @@ setup(name='liftoff',
       license='MIT',
       packages=['liftoff'],
       install_requires=[
+          'pyyaml',
           'tabulate',
-          'termcolor'
+          'termcolor',
       ],
       zip_safe=False)
