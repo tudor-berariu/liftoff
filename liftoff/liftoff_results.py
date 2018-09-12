@@ -4,6 +4,7 @@ import sys
 from typing import Dict, List, Optional, Tuple, Union
 from argparse import Namespace
 import yaml
+from termcolor import colored as clr
 from .config import namespace_to_dict
 
 
@@ -29,7 +30,9 @@ def collect_results(timestamp: Optional[str] = None,
                     experiment_full_name: Optional[str] = None,
                     conditions: Union[Namespace, dict] = None,
                     names: List[str] = None,
-                    incomplete: bool = True) -> List[Tuple[str, List[str]]]:
+                    incomplete: bool = True,
+                    results_dir: str = './results') -> List[
+                        Tuple[str, List[str]]]:
     """Returns the list of lists of paths for requested experiment.
 
     If :timestamp: is given, that specific experiment is used. If
@@ -65,10 +68,15 @@ def collect_results(timestamp: Optional[str] = None,
     """
 
     # --- Find the requested experiment folder
+
+    assert os.path.isdir(results_dir), clr(
+        f"Wrong path to the results folder. Check the `results_dir` argument.",
+        'red', attrs=['bold'])
+
     if experiment_full_name:
         exp_dirs = [experiment_full_name]
     else:
-        exp_dirs: List[str] = os.listdir('results')
+        exp_dirs: List[str] = os.listdir(results_dir)
 
     if experiment_name:
         regex: str = f"\\d+_{experiment_name:s}"
@@ -106,7 +114,7 @@ def collect_results(timestamp: Optional[str] = None,
 
     results: List[Tuple[str, List[str]]] = []
 
-    root_path: str = os.path.join("results", dir_name)
+    root_path: str = os.path.join(results_dir, dir_name)
     for rel_path, dirs, files in os.walk(root_path):
         if ".__leaf" not in files:
             continue
@@ -156,25 +164,27 @@ def collect_all_results(timestamp: Optional[str] = None,
                         experiment_name: Optional[str] = None,
                         conditions: Union[Namespace, dict] = None,
                         names: List[str] = None,
-                        incomplete: bool = True) -> List[Tuple[str, List[str]]]:
-    """ 
+                        incomplete: bool = True,
+                        results_dir: str = './results') -> List[
+                            Tuple[str, List[str]]]:
+    """
         Returns the list of lists of paths for all requested experiments
         in folder 'results/' with name that match //d_*'
     """
 
     results = []
 
-    exp_dirs: List[str] = os.listdir('results')
+    exp_dirs: List[str] = os.listdir(results_dir)
 
     regex: str = f"\\d+_.*"
     exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
 
     for exp_dir in exp_dirs:
-        r = collect_results(timestamp, experiment_name, exp_dir, 
+        r = collect_results(timestamp, experiment_name, exp_dir,
             conditions, names, incomplete)
         if len(r) > 0:
             results.append(r)
-    
+
     return results
 
 __all__ = ["collect_results", "collect_all_results"]
