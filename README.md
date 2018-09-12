@@ -17,12 +17,14 @@
 
 After installing `liftoff` go to `./examples/`.
 
-```cd examples
+```sh
+cd examples
 ```
 
 Remove all previous results:
 
-```rm -r results/*
+```
+rm -r results/*
 ```
 
 ### The test script ###
@@ -31,7 +33,8 @@ The test script is called `smart_example.py`. It takes three numbers
 and adds them together. The arguments are expected in a `Namespace`
 with this structure:
 
-```Namespace(x=2, yz=Namespace(y=3,z=4))
+```python
+Namespace(x=2, yz=Namespace(y=3,z=4))
 ```
 
 The script sleeps for some seconds and the prints the sum of those
@@ -41,7 +44,8 @@ numbers.
 
 Split your terminal and run:
 
-```watch -c -n 1 liftoff-status -a
+```sh
+watch -c -n 1 liftoff-status -a
 ```
 
 Observe running liftoff experiments there as we go through this tutorial.
@@ -54,12 +58,14 @@ module.
 
 Run the following command:
 
-```liftoff smart_example.py
+```sh
+liftoff smart_example.py
 ```
 
 The above command is equivalent to:
 
-```liftoff smart_example.py --default-config-file default --config-file default
+```sh
+liftoff smart_example.py --default-config-file default --config-file default
 ```
 
 You should see the experiment listed by `liftoff-status`.
@@ -72,7 +78,8 @@ default configuration of the experiment.
 
 File `config/diff.yaml` sets different values for `x` and `z`. Run
 
-```liftoff smart_example.py -c diff
+```sh
+liftoff smart_example.py -c diff
 ```
 
 ### Run the same configuration several times ###
@@ -87,13 +94,15 @@ times. Each run will be run in a separate process. But running all
 processes in a sequence is not always what you want. `liftoff` can
 manage parallel executions for you.
 
-```liftoff smart_example.py --runs-no 40 --procs-no 20
+```sh
+liftoff smart_example.py --runs-no 40 --procs-no 20
 ```
 
 If you have multiple GPUs, you can even limit the maximum number of
 concurrent experiments on a single GPU. Running:
 
-```liftoff smart_example.py --runs-no 40 --procs-no 20 --gpus 0,1,2,3 --per-gpu 2
+```sh
+liftoff smart_example.py --runs-no 40 --procs-no 20 --gpus 0,1,2,3 --per-gpu 2
 ```
 
 will allow no more than 2 experiments on each GPU, so even if
@@ -111,7 +120,8 @@ multiple values for some variables: `config.yaml`.
 
 First run
 
-```liftoff-prepare test_experiment
+```sh
+liftoff-prepare test_experiment
 ```
 
 to generate all config
@@ -119,7 +129,8 @@ files. Run `ls configs/test_experiment/` to see what has been generated.
 
 Now run
 
-```liftoff smart_example.py -e test_experiment --comment "My first experiment"
+```sh
+liftoff smart_example.py -e test_experiment --comment "My first experiment"
 ```
 to run all those variations.
 
@@ -184,34 +195,36 @@ experiment configuration from disk (`main`) and one that takes a
 Namespace (`run`).
 
 
-    def run(args: Args) -> None:
-        ...
+```python
+def run(args: Args) -> None:
+    ...
 
 
-    def main():
+def main():
 
-        # Reading args
-		from liftoff.config import read_config
-        args = read_config()  # type: Args
+# Reading args
+from liftoff.config import read_config
+    args = read_config()  # type: Args
 
-        if not hasattr(args, "out_dir"):
-            from time import time
-            if not os.path.isdir('./results'):
-                os.mkdir('./results')
-            out_dir = f'./results/{str(int(time())):s}_{args.experiment:s}'
-            os.mkdir(out_dir)
-            args.out_dir = out_dir
-        else:
-            assert os.path.isdir(args.out_dir), "Given directory does not exist"
+    if not hasattr(args, "out_dir"):
+        from time import time
+        if not os.path.isdir('./results'):
+            os.mkdir('./results')
+        out_dir = f'./results/{str(int(time())):s}_{args.experiment:s}'
+        os.mkdir(out_dir)
+        args.out_dir = out_dir
+    else:
+        assert os.path.isdir(args.out_dir), "Given directory does not exist"
 
-        if not hasattr(args, "run_id"):
-            args.run_id = 0
+    if not hasattr(args, "run_id"):
+        args.run_id = 0
 
-        run(args)
+    run(args)
 
 
-    if __name__ == "__main__":
-        main()
+if __name__ == "__main__":
+    main()
+```
 
 
 
@@ -229,8 +242,9 @@ In order to run an experiment reading the configuration from
 `liftoff smart_example.py`.
 
 
-    liftoff smart_example.py
-
+```sh
+liftoff smart_example.py
+```
 
 You shoud see the program's output and also results saved in
 `./results/<timestamp>_default/`.
@@ -241,7 +255,9 @@ You shoud see the program's output and also results saved in
 You can run an experiment several times using `--runs-no`:
 
 
-    liftoff smart_example.py --runs-no 12 --procs-no 4  --no-detach
+```sh
+liftoff smart_example.py --runs-no 12 --procs-no 4  --no-detach
+```
 
 
 A new folder under `./results/` should appear with a subfolder for
@@ -250,7 +266,9 @@ screen. Chaos. In order to redirect the output of each process to a
 separate file detach processes using system commands executed with `nohup`.
 
 
-    liftoff smart_example --runs-no 12 --procs-no 4
+```sh
+liftoff smart_example --runs-no 12 --procs-no 4
+```
 
 
 
@@ -262,22 +280,25 @@ configuring a batch of experiments. You should firrst run
 launch the experiment with `liftoff -e`.
 
 
-    liftoff-prepare test_experiment -c
-	liftoff-prepare test_experiment
-	liftoff smart_example.py -e test_experiment --procs-no 4
+```sh
+liftoff-prepare test_experiment -c
+liftoff-prepare test_experiment
+liftoff smart_example.py -e test_experiment --procs-no 4
+```
 
 
 ##### Filter out some unwanted configurations #####
 
 
-See the `filter_out` section in
-	`./configs/filter_out/config.yaml`. Some combinations of values
-	will be discarded.
+See the `filter_out` section in `./configs/filter_out/config.yaml`. Some
+combinations of values will be discarded.
 
 
-	liftoff-prepare filter_out -c
-	liftoff-prepare filter_out
-	liftoff smart_example.py -e filter_out
+```sh
+liftoff-prepare filter_out -c
+liftoff-prepare filter_out
+liftoff smart_example.py -e filter_out
+```
 
 
 Also, See [this project](https://github.com/tudor-berariu/lifelong-learning)
@@ -291,13 +312,16 @@ error occurs more than once, you might want to count unique crash
 reasons. Replace `<timestamp>` in the command below:
 
 
-    grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | cut -f 1 -d " " | sort | uniq -c
-
+```sh
+grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | cut -f 1 -d " " | sort | uniq -c
+```
 
 The above command gives you a list of md5 sums (of `err` files) and a
 count for each. If you want to see a particular error message replace
 `<md5sum>` in the command below:
 
 
-    grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | grep <md5sum> | tail -n 1| cut -f 3 -d" " | xargs -r -n 1 -I_file -- sh -c 'echo "_file" ; cat _file'
 
+```sh
+grep "" results/<timestamp>*/*/*/err | cut -d":" -f1 | sort | uniq | xargs -r -n 1 -- md5sum | grep <md5sum> | tail -n 1| cut -f 3 -d" " | xargs -r -n 1 -I_file -- sh -c 'echo "_file" ; cat _file'
+```
