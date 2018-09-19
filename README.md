@@ -13,6 +13,15 @@
   - kill running experiments using `liftoff-abort` (no worries, it asks you first)
 
 
+## Quick install
+
+Pip install directly from the master:
+
+```sh
+pip install git+git://github.com/tudor-berariu/liftoff.git#egg=liftoff --process-dependency-links
+```
+
+
 ## Short tutorial on using `liftoff` ##
 
 After installing `liftoff` go to `./examples/`.
