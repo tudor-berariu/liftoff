@@ -4,6 +4,11 @@ def launch():
     _launch()
 
 
+def evolve():
+    from liftoff.liftoff import evolve as _evolve
+    _evolve()
+
+
 def prepare():
     from liftoff.prepare import main as _prepare
     _prepare()

@@ -1,5 +1,5 @@
 from argparse import ArgumentParser, Namespace
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, Iterable, List, Optional, Tuple
 from copy import deepcopy
 import sys
 import os
@@ -13,13 +13,23 @@ import traceback
 import subprocess
 import yaml
 from termcolor import colored as clr
+import numpy as np
 from numpy.random import shuffle
 
-from .config import read_config, namespace_to_dict, config_to_string, value_of
+from .config import read_config, namespace_to_dict, config_to_string,\
+    value_of, dict_to_namespace, _update_config as update_config
 from .utils.sys_interaction import systime_to
+from .version import version
+from .genetics import get_mutator
+from .utils.miscellaneous import ord_dict_to_string
 
 Args = Namespace
 PID = int
+
+
+def welcome() -> None:
+    print(f"\nThis is {clr('Liftoff', 'yellow', attrs=['bold']):s}"
+          f" {version():s}.\n")
 
 
 def parse_args() -> Args:
@@ -95,10 +105,144 @@ def parse_args() -> Args:
         dest="comment",
         default="",
         help="Short comment")
+    arg_parser.add_argument(
+        '--configs-dir',
+        type=str,
+        default='./configs',
+        dest='configs_dir',
+        help='Folder to search for config files.'
+    )
+    arg_parser.add_argument(
+        '-e', '--experiment',
+        type=str,
+        default="",
+        dest="experiment",
+        help="Experiment. Overrides cf and dcf"
+    )
     return arg_parser.parse_known_args()[0]
 
 
-def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
+def read_scores(root_path: str) -> Tuple[List[str], List[float]]:
+    scores, paths = [], []
+    nscores = 0
+    for rel_path, _dirs, files in os.walk(root_path):
+        if not all((f in files) for f in ['.__leaf', 'genotype.yaml', 'fitness']):
+            continue
+        with open(os.path.join(rel_path, "fitness")) as handler:
+            fitness = float(handler.readline().strip())
+            paths.append(os.path.join(rel_path, 'genotype.yaml'))
+            scores.append(fitness)
+            nscores += 1
+    print(f"[Main] {nscores:d} scores found.")
+    return scores, paths
+
+
+def roulette_probs(scores: np.ndarray) -> np.ndarray:
+    if np.any(scores < 0):
+        scores = np.exp(scores)
+    return scores / np.sum(scores)
+
+
+def rank_probs(scores: np.ndarray) -> np.ndarray:
+    inv_ranks = np.argsort(scores) + 1
+    return inv_ranks / np.sum(inv_ranks)
+
+
+def read_genotype(path: str) -> Namespace:
+    with open(path) as handler:
+        cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+    return dict_to_namespace(cfg)
+
+
+def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
+    path = os.path.join(args.configs_dir, args.experiment)
+    default_cfg = read_genotype(os.path.join(path, "default.yaml"))
+    genotype_cfg = read_genotype(os.path.join(path, "genotype.yaml"))
+
+    mutator = get_mutator(genotype_cfg)
+
+    # -- TODO: Improve this
+
+    crossover_ratio = .5
+    steps = 100
+    selection = "roulette"
+
+    if hasattr(genotype_cfg, "meta"):
+        if hasattr(genotype_cfg.meta, "crossover_ratio"):
+            crossover_ratio = genotype_cfg.meta.crossover_ratio
+        if hasattr(genotype_cfg.meta, "steps"):
+            steps = genotype_cfg.meta.steps
+        if hasattr(genotype_cfg.meta, "selection"):
+            selection = genotype_cfg.meta.selection
+
+    # ---
+
+    to_probs = roulette_probs if selection == "roulette" else rank_probs
+
+    step = 0
+    scores, paths = read_scores(root_path)
+    scores = to_probs(np.array(scores))
+    while step < steps:
+        found = False
+        while not found:
+            if scores.size == 0:
+                new_genotype = mutator.sample()
+            elif np.random.sample() < crossover_ratio:
+                parent1 = read_genotype(np.random.choice(paths, p=scores))
+                parent2 = read_genotype(np.random.choice(paths, p=scores))
+                new_genotype = mutator.crossover(parent1, parent2)
+            else:
+                parent = read_genotype(np.random.choice(paths, p=scores))
+                new_genotype = mutator.mutate(parent)
+
+            new_phenotype = mutator.to_phenotype(new_genotype)
+            title = ord_dict_to_string(new_phenotype.__dict__)
+            title_path = os.path.join(root_path, title)
+            if not os.path.isdir(title_path):
+                os.makedirs(title_path)
+                existing = []
+            else:
+                existing = os.listdir(title_path)
+
+            for i in range(args.runs_no):
+                # TODO: this is problematic with resumed experiments
+                if str(i) not in existing:
+                    experiment_path = os.path.join(title_path, str(i))
+                    os.makedirs(experiment_path)
+                    new_cfg = deepcopy(default_cfg)
+                    update_config(new_cfg, new_phenotype)
+                    new_cfg.run_id = i
+                    new_cfg.out_dir = experiment_path
+                    new_cfg.cfg_dir = experiment_path
+
+                    # -- Create the new files
+                    open(os.path.join(experiment_path, ".__leaf"), "a").close()
+                    cfg_path = os.path.join(experiment_path, "cfg.yaml")
+                    with open(cfg_path, "w") as yaml_file:
+                        yaml.safe_dump(namespace_to_dict(new_cfg), yaml_file,
+                                       default_flow_style=False)
+                    genotype_path = os.path.join(experiment_path, "genotype.yaml")
+                    with open(genotype_path, "w") as yaml_file:
+                        yaml.safe_dump(namespace_to_dict(new_genotype), yaml_file,
+                                       default_flow_style=False)
+                    phenotype_path = os.path.join(experiment_path, "phenotype.yaml")
+                    with open(phenotype_path, "w") as yaml_file:
+                        yaml.safe_dump(namespace_to_dict(new_phenotype), yaml_file,
+                                       default_flow_style=False)
+
+                    yield new_cfg
+                    found = True
+                    break
+        step += 1
+
+        if step % 10 == 0:
+            scores, paths = read_scores(root_path)
+            scores = to_probs(np.array(scores))
+
+    print()
+
+
+def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> Iterable[Args]:
     """Takes the configs read from files and augments them with
     out_dir, and run_id"""
 
@@ -187,7 +331,7 @@ def get_function(args: Args) -> Callable[[Args], None]:
         module_name = module_name[:-3]
         function = "run"
     else:
-    	module_name, function = module_name.split(".")
+        module_name, function = module_name.split(".")
 
     module = import_module(module_name)
     if function not in module.__dict__:
@@ -195,7 +339,7 @@ def get_function(args: Args) -> Callable[[Args], None]:
     return partial(wrapper, module.__dict__[function])
 
 
-def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
+def spawn_from_here(exp_args: Iterable[Args], args: Args) -> None:
 
     # Figure out what should be executed
     function = get_function(args)
@@ -222,8 +366,6 @@ def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
 
     class MyPool(multiprocessing.pool.Pool):
         Process = NoDaemonProcess
-
-    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
 
     pool = MyPool(args.procs_no)
     pool.map(function, exp_args)
@@ -271,10 +413,10 @@ def launch(py_file: str,
         env_vars = f"source activate {env:s}; {env_vars:s}"
 
     cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
-          f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
-          f" --configs-dir {exp_args.cfg_dir:s}" +\
-          f" --config-file cfg" +\
-          f" --default-config-file cfg" +\
+        f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
+        f" --configs-dir {exp_args.cfg_dir:s}" +\
+        f" --config-file cfg" +\
+        f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
           f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
@@ -323,9 +465,10 @@ def dump_pids(path, pids):
 
 
 def run_from_system(root_path: str, timestamp: int,
-                    cfgs: List[Args], args: Args) -> None:
+                    exp_args: Iterable[Args], args: Args) -> None:
     active_procs: List[Tuple[PID, Optional[int]]] = []
     max_procs_no = get_max_procs(args)
+    assert max_procs_no > 0, "You would have been waiting in vain..."
     crt_pid = os.getpid()
     print(f"PID of current process is {crt_pid:d}.")
     print("The maximum number of experiments in parallel will be: ",
@@ -338,35 +481,35 @@ def run_from_system(root_path: str, timestamp: int,
     if not os.path.isfile(py_file):
         raise FileNotFoundError("Could not find {py_file:s}.")
 
-    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
     env = value_of(args, "env", None)
 
-    while exp_args:
-        if len(active_procs) < max_procs_no:
-            gpu = None
-            for gpu_j in gpus:
-                if len([_ for (_, _g) in active_procs if _g == gpu_j]) < epg:
-                    gpu = gpu_j
-                    break
-            next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
-                             env, gpu=gpu, omp=args.omp, mkl=args.mkl)
-            active_procs.append((new_pid, gpu))
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
-        else:
-            time.sleep(1)
-
-        old_active_procs = active_procs
-        active_procs = []
-        changed = False
-        for (pid, gpu) in old_active_procs:
-            if still_active(pid, py_file):
-                active_procs.append((pid, gpu))
+    for next_args in exp_args:
+        while True:
+            old_active_procs = active_procs
+            active_procs = []
+            changed = False
+            for (pid, gpu) in old_active_procs:
+                if still_active(pid, py_file):
+                    active_procs.append((pid, gpu))
+                else:
+                    changed = True
+                    print(f"Process {pid:d} seems to be done.")
+            if changed:
+                dump_pids(root_path, [pid for (pid, _) in active_procs])
+            if len(active_procs) < max_procs_no:
+                break
             else:
-                changed = True
-                print(f"Process {pid:d} seems to be done.")
-        if changed:
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
+                time.sleep(1)
+
+        gpu = None
+        for gpu_j in gpus:
+            if len([_ for (_, _g) in active_procs if _g == gpu_j]) < epg:
+                gpu = gpu_j
+                break
+        new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
+                         env, gpu=gpu, omp=args.omp, mkl=args.mkl)
+        active_procs.append((new_pid, gpu))
+        dump_pids(root_path, [pid for (pid, _) in active_procs])
 
     wait_time = 1
     while active_procs:
@@ -389,7 +532,85 @@ def run_from_system(root_path: str, timestamp: int,
     print(clr("All done!", attrs=["bold"]))
 
 
+def evolve():
+    welcome()
+    args = parse_args()
+    print(config_to_string(args))
+
+    # Make sure configuration files are ok
+
+    assert hasattr(args, "experiment"), "Must specify experiment"
+    experiment_path = f"{args.configs_dir}/{args.experiment:s}"
+    assert os.path.isdir(experiment_path)
+    assert os.path.isfile(f"{experiment_path}/default.yaml")
+    assert os.path.isfile(f"./configs/{args.experiment:s}/genotype.yaml")
+
+    root_path: str = None
+    timestamp: Optional[int] = None
+    if hasattr(args, "timestamp") and args.timestamp is not None:
+        timestamp = int(args.timestamp)
+
+    if args.resume:
+        # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
+        experiment = args.experiment
+        if timestamp:
+            previous = [f for f in os.listdir("./results/")
+                        if f.startswith(str(timestamp))
+                        and f.endswith(experiment)]
+            if not previous:
+                raise Exception(
+                    f"No previous experiment with timestamp {timestamp:d}.")
+        else:
+            previous = [f for f in os.listdir("./results/")
+                        if re.match(f"\\d+_{experiment:s}", f)]
+            if not previous:
+                raise Exception(f"No previous experiment {experiment:s}.")
+
+        last_time = str(max([int(f.split("_")[0]) for f in previous]))
+        print("Resuming", last_time, "!")
+        root_path = os.path.join("results", f"{last_time:s}_{experiment:s}")
+        timestamp = int(last_time)
+        if not os.path.isdir(root_path):
+            raise Exception(f"{root_path:s} is not a folder.")
+        with open(os.path.join(root_path, ".__timestamp"), "r") as t_file:
+            if int(t_file.readline().strip()) != timestamp:
+                raise Exception(f"{root_path:s} has the wrong timestamp.")
+
+    else:
+        # -------------------- STARTING A NEW EXPERIMENT --------------------
+        timestamp = int(time.time())
+        root_path = f"results/{timestamp:d}_{args.experiment:s}/"
+        while os.path.exists(root_path):
+            timestamp = int(time.time())
+            root_path = f"results/{timestamp:d}_{args.experiment:s}/"
+        os.makedirs(root_path)
+        with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
+            t_file.write(f"{timestamp:d}\n")
+
+    with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
+        ppid_file.write(f"{os.getpid():d}\n")
+    if args.comment:
+        with open(os.path.join(root_path, ".__comment"), "w") as comment_file:
+            comment_file.write(args.comment)
+
+    # You need to build the generator
+
+    exp_args = genetic_search(root_path, args)
+
+    # At this point you need to have root_path, exp_args, timestamp, exp_args
+
+    if args.no_detach:
+        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+            m_file.write("multiprocess\n")
+        spawn_from_here(exp_args, args)
+    else:
+        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+            m_file.write("nohup\n")
+        run_from_system(root_path, timestamp, exp_args, args)
+
+
 def main():
+    welcome()
     args = parse_args()
     print(config_to_string(args))
 
@@ -401,7 +622,7 @@ def main():
 
     root_path: str = None
     timestamp: Optional[int] = None
-    if hasattr(args, "experiment"):
+    if hasattr(args, "timestamp") and args.timestamp is not None:
         timestamp = int(args.timestamp)
 
     if args.resume:
@@ -472,14 +693,18 @@ def main():
         open(os.path.join(root_path, ".__leaf"), "a").close()
         cfg.out_dir, cfg.run_id = root_path, 0
         get_function(args)(cfg)
-    elif args.no_detach:
+        return
+
+    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
+
+    if args.no_detach:
         with open(os.path.join(root_path, ".__mode"), "w") as m_file:
             m_file.write("multiprocess\n")
-        spawn_from_here(root_path, cfgs, args)
+        spawn_from_here(exp_args, args)
     else:
         with open(os.path.join(root_path, ".__mode"), "w") as m_file:
             m_file.write("nohup\n")
-        run_from_system(root_path, timestamp, cfgs, args)
+        run_from_system(root_path, timestamp, exp_args, args)
 
 
 if __name__ == "__main__":

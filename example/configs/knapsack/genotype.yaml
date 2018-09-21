@@ -1,0 +1,32 @@
+rocks:
+  platinum:
+    gtype: ptwo
+    min_power: 0
+    max_power: 7
+  gold:
+    gtype: ptwo
+    min_power: 0
+    max_power: 7
+  silver:
+    gtype: ptwo
+    min_power: 0
+    max_power: 7
+  bronze:
+    gtype: number
+    positive: yes
+    precision: 2
+    min_order: 0
+    max_order: 2
+
+wood:
+  gtype: set
+  domain: ['none', 'some', 'much']
+
+coal:
+  gtype: set
+  domain: ['none', 'some', 'much']
+
+meta:
+  steps: 500
+  selection: roulette
+  
