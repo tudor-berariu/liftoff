@@ -39,7 +39,7 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
     for key, value in diff_cfg.__dict__.items():
         if key.startswith("_"):
             # Keys starting with '_' are entirely overwritten
-            setattr(default_cfg, key, value)
+            setattr(default_cfg, key[1:], value)
         elif isinstance(value, Namespace):
             if hasattr(default_cfg, key):
                 _update_config(getattr(default_cfg, key), value)
