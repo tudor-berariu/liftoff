@@ -185,6 +185,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
     scores, paths = read_scores(root_path)
     scores = to_probs(np.array(scores))
     while step < steps:
+        print(f"[Main] Step {step:d}.")
         found = False
         while not found:
             manual_path = None
@@ -262,7 +263,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
             scores, paths = read_scores(root_path)
             scores = to_probs(np.array(scores))
 
-    print()
+    print("Genetics are done.")
 
 
 def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> Iterable[Args]:
