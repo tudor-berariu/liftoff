@@ -1,6 +1,7 @@
 from argparse import Namespace
 import os.path
 import numpy as np
+from time import sleep
 
 from liftoff.config import read_config
 
@@ -28,8 +29,6 @@ def run(args: Namespace) -> float:
     for other in ["wood", "coal"]:
         quantities[other] = CATEGORICAL[getattr(args, other)]
 
-    print(quantities)
-
     for material, quantity in quantities.items():
         profit, weight = PROPERTIES[material]
         total_weight += weight * quantity
@@ -38,7 +37,9 @@ def run(args: Namespace) -> float:
     profit += np.random.sample()
 
     fitness = max(total_profit + min(0, MAX_WEIGHT - total_weight) * total_profit, 0)
-    print(args.out_dir)
+
+    sleep(np.random.randint(1, 3))
+
     with open(os.path.join(args.out_dir, "fitness"), 'w') as filehandler:
         filehandler.write(f"{fitness:.2f}\n")
     return fitness

@@ -177,6 +177,8 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
 
     # ---
 
+    to_run_path = os.path.join(root_path, "to_run")
+
     to_probs = roulette_probs if selection == "roulette" else rank_probs
 
     step = 0
@@ -185,7 +187,22 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
     while step < steps:
         found = False
         while not found:
-            if scores.size == 0:
+            manual_path = None
+            if os.path.isdir(to_run_path) and [f for f in os.listdir(to_run_path) if f.endswith(".yaml")]:
+                for fname in os.listdir(to_run_path):
+                    if fname.endswith(".yaml"):
+                        try:
+                            manual_path = os.path.join(to_run_path, fname)
+                            new_genotype = read_genotype(manual_path)
+                            break
+                        except Exception as e:
+                            os.remove(manual_path)
+                            print(str(e))
+                            print(f"\n{fname:s} was deleted\n\n")
+                            with open(os.path.join(to_run_path, "log"), "a") as logfile:
+                                logfile.write(str(e))
+                                logfile.write(f"\n{fname:s} was deleted\n\n")
+            elif scores.size == 0:
                 new_genotype = mutator.sample()
             elif np.random.sample() < crossover_ratio:
                 parent1 = read_genotype(np.random.choice(paths, p=scores))
@@ -233,6 +250,12 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
                     yield new_cfg
                     found = True
                     break
+            if manual_path:
+                # It means a given genotype was already executed runs_no times
+                with open(os.path.join(to_run_path, "log"), "a") as logfile:
+                    logfile.write(f"{manual_path:s} done\n")
+                print(f"{manual_path:s} done\n")
+                os.remove(manual_path)
         step += 1
 
         if step % 10 == 0:
