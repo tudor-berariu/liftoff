@@ -22,3 +22,8 @@ def status():
 def abort():
     from liftoff.liftoff_utils import abort as _abort
     _abort()
+
+
+def elite():
+    from liftoff.elite import elite as _elite
+    _elite()
