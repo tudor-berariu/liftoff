@@ -180,6 +180,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
             steps = genotype_cfg.meta.steps
         if hasattr(genotype_cfg.meta, "selection"):
             selection = genotype_cfg.meta.selection
+    print("Using", selection, "selection!")
 
     # ---
 
@@ -188,7 +189,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
     to_probs = {'roulette': roulette_probs,
                 'rank': rank_probs,
                 'squared_rank': square_rank_probs}[selection]
-
+    
     step = 0
     scores, paths = read_scores(root_path)
     scores = to_probs(np.array(scores))
@@ -212,7 +213,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
                                 logfile.write(str(e))
                                 logfile.write(f"\n{fname:s} was deleted\n\n")
             elif scores.size == 0:
-                new_genotype = dict_to_namespace(mutator.sample())
+                new_genotype = mutator.sample()
             elif np.random.sample() < crossover_ratio:
                 parent1 = read_genotype(np.random.choice(paths, p=scores))
                 parent2 = read_genotype(np.random.choice(paths, p=scores))
