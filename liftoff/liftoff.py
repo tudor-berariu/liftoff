@@ -148,6 +148,12 @@ def rank_probs(scores: np.ndarray) -> np.ndarray:
     return inv_ranks / np.sum(inv_ranks)
 
 
+def square_rank_probs(scores: np.ndarray) -> np.ndarray:
+    inv_ranks = np.argsort(scores) + 1
+    squared_ranks = inv_ranks * inv_ranks
+    return squared_ranks / np.sum(squared_ranks)
+
+
 def read_genotype(path: str) -> Namespace:
     with open(path) as handler:
         cfg = yaml.load(handler, Loader=yaml.SafeLoader)
@@ -179,7 +185,9 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
 
     to_run_path = os.path.join(root_path, "to_run")
 
-    to_probs = roulette_probs if selection == "roulette" else rank_probs
+    to_probs = {'roulette': roulette_probs,
+                'rank': rank_probs,
+                'squared_rank': square_rank_probs}[selection]
 
     step = 0
     scores, paths = read_scores(root_path)
@@ -204,7 +212,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
                                 logfile.write(str(e))
                                 logfile.write(f"\n{fname:s} was deleted\n\n")
             elif scores.size == 0:
-                new_genotype = mutator.sample()
+                new_genotype = dict_to_namespace(mutator.sample())
             elif np.random.sample() < crossover_ratio:
                 parent1 = read_genotype(np.random.choice(paths, p=scores))
                 parent2 = read_genotype(np.random.choice(paths, p=scores))
