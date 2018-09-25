@@ -3,6 +3,7 @@ def ord_dict_to_string(dct: dict):
     sorted_pairs = []
     for key in sorted_keys:
         value = str(dct[key])
+        value = value.replace("-", "m")
         for char in " -.,=:;/()[]'+":
             value = value.replace(char, "_")
         while "___" in value:
