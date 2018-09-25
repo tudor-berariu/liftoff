@@ -1,16 +1,38 @@
 import os
 import re
 import sys
+import zipfile
 from typing import Dict, List, Optional, Tuple, Union
-from argparse import Namespace
+from argparse import ArgumentParser, Namespace
 import yaml
 from termcolor import colored as clr
 from .config import namespace_to_dict
 
 
+__all__ = ["collect_results", "collect_all_results", "commit"]
+
+
+Args = Namespace
+
+
 TO_IGNORE = [".__leaf",
              ".__timestamp", ".__ppid", ".__mode", ".__comment",
              ".__start", ".__end", ".__crash"]
+
+
+def parse_commit_args() -> Args:
+    arg_parser = ArgumentParser()
+    arg_parser.add_argument(
+        "-e", "--experiment", type=str, dest="experiment",
+        help="Get by name.")
+    arg_parser.add_argument(
+        "-t", "--timestamp", type=str, dest="timestamp",
+        help="Get by timestamp.")
+    arg_parser.add_argument(
+        "-d", "--results-dir", dest="results_dir", default="results",
+        help="Results directory (default: ./results)")
+
+    return arg_parser.parse_args()
 
 
 def check(conditions: dict, config_data: dict) -> bool:
@@ -187,4 +209,101 @@ def collect_all_results(timestamp: Optional[str] = None,
 
     return results
 
-__all__ = ["collect_results", "collect_all_results"]
+
+ZipFile = zipfile.ZipFile
+def dir_to_zip(zip_handle: ZipFile, path: str, base_path: str = ""):
+    """
+    Adding directory given by `path` to opened zip file `zip_handle`
+
+    @param base_path path that will be removed from `path` when adding to
+    archive
+
+    Examples:
+        add whole "dir" to "test.zip" (when you open "test.zip" you will see
+        only "dir")
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir')
+        zip_handle.close()
+        ```
+
+        add contents of "dir" to "test.zip" (when you open "test.zip" you will
+        see only it's contents)
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir', 'dir')
+        zip_handle.close()
+        ```
+
+        add contents of "dir/subdir" to "test.zip" (when you open "test.zip"
+        you will see only contents of "subdir")
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir/subdir', 'dir/subdir')
+        zip_handle.close()
+        ```
+
+        add whole "dir/subdir" to "test.zip" (when you open "test.zip" you will
+        see only "subdir")
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir/subdir', 'dir')
+        zip_handle.close()
+        ```
+
+        add whole "dir/subdir" with full path to "test.zip" (when you open
+        "test.zip" you will see only "dir" and inside it only "subdir")
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir/subdir')
+        zip_handle.close()
+        ```
+
+        add whole "dir" and "otherDir" (with full path) to "test.zip" (when you
+        open "test.zip" you will see only "dir" and "otherDir")
+        ```
+        zip_handle = zipfile.ZipFile('test.zip', 'w')
+        addDirToZip(zip_handle, 'dir')
+        addDirToZip(zip_handle, 'otherDir')
+        zip_handle.close()
+        ```
+    """
+    base_path = base_path.rstrip("\\/") + ""
+    base_path = base_path.rstrip("\\/")
+    for root, _, files in os.walk(path):
+        # add dir itself (needed for empty dirs
+        dir_path = os.path.join(root, ".")
+        print(f'compressing files in {dir_path}')
+        zip_handle.write(dir_path)
+        # add files
+        for file in files:
+            file_path = os.path.join(root, file)
+            in_zip_path = file_path.replace(base_path, "", 1).lstrip("\\/")
+            # print file_path + " , " + in_zip_path
+            zip_handle.write(file_path, in_zip_path)
+
+
+def commit() -> None:
+    """ Takes the last experiment it finds and archives it.
+    """
+    args = parse_commit_args()
+
+    assert os.path.isdir(args.results_dir), clr(
+        f"Wrong path to the results folder. Check the `results_dir` argument.",
+        'red', attrs=['bold'])
+
+    # get dir names in the results dir
+    exp_names = [name for name in os.listdir(args.results_dir)
+                 if os.path.isdir(f'{args.results_dir}/{name}')]
+    assert exp_names, clr(
+        f'You have no experiments in your {args.results_dir} folder.',
+        'red', attrs=['bold'])
+
+    # zip the last experiment
+    last_exp_name = sorted(exp_names)[-1]
+    zipf = zipfile.ZipFile(f'{args.results_dir}/{last_exp_name}.zip', 'w',
+                           zipfile.ZIP_DEFLATED)
+    dir_to_zip(zipf,
+               path=f'{args.results_dir}/{last_exp_name}',
+               base_path=f'{args.results_dir}/{last_exp_name}')
+    zipf.close()

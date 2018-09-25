@@ -17,3 +17,8 @@ def status():
 def abort():
     from liftoff.liftoff_utils import abort as _abort
     _abort()
+
+
+def commit():
+    from liftoff.liftoff_results import commit as _commit
+    _commit()
