@@ -1,5 +1,6 @@
 import subprocess
 import os.path
+from termcolor import colored as clr
 
 
 def get_commit():
@@ -15,7 +16,7 @@ def get_commit():
             return ""
         out = out.decode("Utf-8").strip()
         return "+" + out
-    except Exception as e:
+    except Exception as e:  # TODO: Catch a more specific exception
         pass
     return ""
 
@@ -25,5 +26,10 @@ def version() -> str:
     return "0.2" + commit
 
 
+def welcome() -> None:
+    print(f"\nThis is {clr('Liftoff', 'yellow', attrs=['bold']):s}"
+          f" {version():s}.\n")
+
+
 if __name__ == "__main__":
-    print(version())
+    welcome()
