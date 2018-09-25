@@ -3,7 +3,7 @@ from copy import deepcopy
 from argparse import Namespace
 import numpy as np
 
-from liftoff.config import namespace_to_dict
+from liftoff.config import namespace_to_dict, config_to_string
 
 
 # -- Numbers  digit ** (10 ** order)
@@ -166,22 +166,27 @@ class Mutator:
                 for other_var_name, _other_var_value in assoc:
                     assert other_var_name in variables
 
-    def mutate(self, args: Namespace) -> Namespace:
-        args = deepcopy(args)
+    def mutate(self, old_genotype: Namespace) -> Namespace:
+        genotype = deepcopy(old_genotype)
         var_name = np.random.choice(list(self.variables.keys()))
         var_type, kwargs = self.variables[var_name]
-        new_value = Mutator.MUTATE_FS[var_type](args.__dict__[var_name], **kwargs)
-        args.__dict__[var_name] = new_value
-        correct_args(args, self.constraints)
-        return args
+        new_value = Mutator.MUTATE_FS[var_type](genotype.__dict__[var_name], **kwargs)
+        genotype.__dict__[var_name] = new_value
+        correct_args(genotype, self.constraints)
+        print("Mutated\n{}to\n{}".format(config_to_string(old_genotype),
+                                         config_to_string(genotype)))
+        return genotype
 
-    def crossover(self, args1: Namespace, args2: Namespace) -> Namespace:
-        args = deepcopy(args1)
+    def crossover(self, parent1: Namespace, parent2: Namespace) -> Namespace:
+        child = deepcopy(parent1)
         for var_name in self.variables.keys():
             if np.random.sample() < .5:
-                args.__dict__[var_name] = args2.__dict__[var_name]
-        correct_args(args, self.constraints)
-        return args
+                child.__dict__[var_name] = parent2.__dict__[var_name]
+        correct_args(child, self.constraints)
+        print("Combined\n{}and\n{}into\n{}".format(config_to_string(parent1),
+                                                   config_to_string(parent2),
+                                                   config_to_string(child)))
+        return child
 
     def check_args(self, args: Namespace) -> bool:
         for (var_name, (var_type, kwargs)) in self.variables.items():
@@ -192,18 +197,18 @@ class Mutator:
         return True
 
     def sample(self) -> Namespace:
-        args = Namespace()
+        genotype = Namespace()
         for (var_name, (var_type, kwargs)) in self.variables.items():
             if var_type == "number":
-                setattr(args, var_name, random_number(**kwargs))
+                setattr(genotype, var_name, random_number(**kwargs))
             elif var_type == "ptwo":
-                setattr(args, var_name, random_power_of_two(**kwargs))
+                setattr(genotype, var_name, random_power_of_two(**kwargs))
             elif var_type == "set":
-                setattr(args, var_name, random_from_set(**kwargs))
+                setattr(genotype, var_name, random_from_set(**kwargs))
             else:
                 raise ValueError
-        correct_args(args, self.constraints)
-        return args
+        correct_args(genotype, self.constraints)
+        return genotype
 
     def to_phenotype(self, genotype: Namespace) -> Namespace:
         phenotype = Namespace()
