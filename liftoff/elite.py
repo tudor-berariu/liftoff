@@ -75,7 +75,7 @@ def elite() -> None:
                 for key, value in x.items():
                     queue.append((((prev + ".") if prev else "") + key, value))
             else:
-                pairs.append((prev, str(x)))
+                pairs.append((prev, x))
         pairs.sort(key=lambda x: x[0])
 
         print(f"{clr('***', 'red'):s} Fitness: {clr(f'{fitness:.2f}', 'yellow'):s} {clr('***', 'red'):s}")
