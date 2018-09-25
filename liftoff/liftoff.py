@@ -1,9 +1,14 @@
+# TODO: This needs major refactoring! Version .3 scheduled for this autumn.
+
 from argparse import ArgumentParser, Namespace
-from typing import Callable, Iterable, List, Optional, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Tuple
+from types import SimpleNamespace
 from copy import deepcopy
 import sys
 import os
 from functools import partial
+import socket
+import selectors
 import re
 from importlib import import_module
 import multiprocessing
@@ -15,11 +20,12 @@ import yaml
 from termcolor import colored as clr
 import numpy as np
 from numpy.random import shuffle
+from tabulate import tabulate
 
 from .config import read_config, namespace_to_dict, config_to_string,\
     value_of, dict_to_namespace, _update_config as update_config
 from .utils.sys_interaction import systime_to
-from .version import version
+from .version import welcome
 from .genetics import get_mutator
 from .utils.miscellaneous import ord_dict_to_string
 
@@ -27,9 +33,115 @@ Args = Namespace
 PID = int
 
 
-def welcome() -> None:
-    print(f"\nThis is {clr('Liftoff', 'yellow', attrs=['bold']):s}"
-          f" {version():s}.\n")
+class LiftoffState:
+
+    def __init__(self, args: Namespace, evolves: bool = True) -> None:
+        self.do_quit = False
+        self.runs_no = args.runs_no
+
+        self.gpus = args.gpus
+        assert isinstance(self.gpus, list)
+
+        self.procs_no = args.procs_no
+        assert isinstance(self.procs_no, int)
+
+        self.per_gpu = {g: args.per_gpu for g in args.gpus}
+
+        self._evolves = evolves
+        self.selection = ""
+        self.crossover = .1
+
+        self._components = ["gpus", "procs_no", "per_gpu"]
+
+        if evolves:
+            self._components.extend(["selection", "crossover", "random", "runs_no"])
+
+    @property
+    def table(self) -> str:
+        all_vars = []
+        for var_name in self._components:
+            all_vars.append((var_name, getattr(self, var_name)))
+        return tabulate(all_vars)
+
+    @property
+    def flat(self) -> str:
+        all_vars = []
+        for var_name in self._components:
+            all_vars.append(var_name + "=" + str(getattr(self, var_name)))
+        return ";".join(all_vars)
+
+    def process_commands(self, data: SimpleNamespace) -> None:
+        # TODO: This must be changed to something more intelligent
+        commands = data.inb.split(b' END\n')
+        data.inb = commands[-1]
+        commands = commands[:-1]
+        answers = []
+
+        for command in commands:
+            words = [word for word in command.decode().split() if word]
+            nwords = len(words)
+            if not words:
+                answers.append("Empty command.")
+            elif words[0] == "quit":
+                self.do_quit = True
+            elif words[0] not in ["set", "add", "remove"]:
+                answers.append("Commands must start with set / add / remove.")
+            elif nwords != 3 and not (nwords == 4 and words[1] == "per_gpu"):
+                answers.append("Wrong command: " + " ".join(words))
+            elif words[0] in ["add", "remove"] and (words[1] != "gpu" or nwords < 2):
+                answers.append("Wrong command: " + " ".join(words))
+            elif words[0] == "add":
+                for new_gpu in words[2:]:
+                    if new_gpu in self.gpus:
+                        answers.append(f"GPU {new_gpu:s} already in use.")
+                    else:
+                        self.gpus.append(new_gpu)
+                        self.per_gpu[new_gpu] = cnt = min(self.per_gpu.values())
+                        answers.append(f"OK. Added gpu {new_gpu:s} waiting for {cnt:d} experiments.")
+            elif words[0] == "remove":
+                for old_gpu in words[2:]:
+                    if old_gpu not in self.gpus:
+                        answers.append(f"GPU {old_gpu:s} not in use.")
+                    else:
+                        self.gpus.remove(old_gpu)
+                        del self.per_gpu[old_gpu]
+                        answers.append(f"OK. Removed gpu {old_gpu:s}.")
+            elif words[1] not in self._components:
+                answers.append(f"Unknown field {words[1]:s}.")
+            elif words[1] != "per_gpu":
+                if words[1] in ["random", "crossover"]:
+                    func = float
+                elif words[1] in ["runs_no", "procs_no"]:
+                    func = int
+                else:
+                    func = str
+                try:
+                    setattr(self, words[1], func(words[2]))
+                    answers.append(f"Set {words[1]} to {words[2]}.")
+                except ValueError as exc:
+                    answers.append(str(exc))
+            elif nwords == 3:
+                try:
+                    value = int(words[2])
+                    self.per_gpu = {gpu: value for gpu in self.per_gpu.keys()}
+                    answers.append(f"Set per_gpu to {value:d} for all gpus.")
+                except ValueError as exc:
+                    answers.append(str(exc))
+            else:
+                try:
+                    gpu_id = int(words[2])
+                    if gpu_id not in self.gpus:
+                        answers.append(f"Unknown gpu {gpu_id:d}.")
+                    else:
+                        value = int(words[3])
+                        self.per_gpu[gpu_id] = value
+                        answers.append(f"Set per_gpu to {value:d} for gpu {gpu_id:s}.")
+                except ValueError as exc:
+                    answers.append(str(exc))
+
+        for answer in answers:
+            data.outb += (answer + '\n').encode('utf-8')
+        data.outb += (self.flat + ' END\n').encode('utf-8')
 
 
 def parse_args() -> Args:
@@ -160,7 +272,8 @@ def read_genotype(path: str) -> Namespace:
     return dict_to_namespace(cfg)
 
 
-def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
+def genetic_search(state: LiftoffState,
+                   root_path: str, args: Namespace) -> Iterable[Args]:
     path = os.path.join(args.configs_dir, args.experiment)
     default_cfg = read_genotype(os.path.join(path, "default.yaml"))
     genotype_cfg = read_genotype(os.path.join(path, "genotype.yaml"))
@@ -169,18 +282,19 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
 
     # -- TODO: Improve this
 
-    crossover_ratio = .5
+    state.crossover = .5
+    state.random = 0.
     steps = 100
-    selection = "roulette"
+    state.selection = "roulette"
 
     if hasattr(genotype_cfg, "meta"):
-        if hasattr(genotype_cfg.meta, "crossover_ratio"):
-            crossover_ratio = genotype_cfg.meta.crossover_ratio
+        if hasattr(genotype_cfg.meta, "crossover"):
+            state.crossover = genotype_cfg.meta.crossover
         if hasattr(genotype_cfg.meta, "steps"):
             steps = genotype_cfg.meta.steps
         if hasattr(genotype_cfg.meta, "selection"):
-            selection = genotype_cfg.meta.selection
-    print("Using", selection, "selection!")
+            state.selection = genotype_cfg.meta.selection
+    print("Using", state.selection, "selection!")
 
     # ---
 
@@ -188,16 +302,18 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
 
     to_probs = {'roulette': roulette_probs,
                 'rank': rank_probs,
-                'squared_rank': square_rank_probs}[selection]
-    
+                'squared_rank': square_rank_probs}
+
     step = 0
     scores, paths = read_scores(root_path)
-    scores = to_probs(np.array(scores))
-    while step < steps:
+    scores = to_probs[state.selection](np.array(scores))
+
+    while step < steps and not state.do_quit:
         print(f"[Main] Step {step:d}.")
         found = False
         while not found:
             manual_path = None
+            probe = np.random.sample()
             if os.path.isdir(to_run_path) and [f for f in os.listdir(to_run_path) if f.endswith(".yaml")]:
                 for fname in os.listdir(to_run_path):
                     if fname.endswith(".yaml"):
@@ -205,25 +321,28 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
                             manual_path = os.path.join(to_run_path, fname)
                             new_genotype = read_genotype(manual_path)
                             break
-                        except Exception as e:
+                        except Exception as exc:
                             os.remove(manual_path)
-                            print(str(e))
+                            print(str(exc))
                             print(f"\n{fname:s} was deleted\n\n")
                             with open(os.path.join(to_run_path, "log"), "a") as logfile:
-                                logfile.write(str(e))
+                                logfile.write(str(exc))
                                 logfile.write(f"\n{fname:s} was deleted\n\n")
-            elif scores.size == 0:
+            elif scores.size == 0 or probe < state.random:
+                print("[Main] Generating random experiment.")
                 new_genotype = mutator.sample()
-            elif np.random.sample() < crossover_ratio:
+            elif np.random.sample() < state.crossover:
+                print("[Main] Generating child experiment through crossover.")
                 parent1 = read_genotype(np.random.choice(paths, p=scores))
                 parent2 = read_genotype(np.random.choice(paths, p=scores))
                 new_genotype = mutator.crossover(parent1, parent2)
             else:
+                print("[Main] Mutating some experiment.")
                 parent = read_genotype(np.random.choice(paths, p=scores))
                 new_genotype = mutator.mutate(parent)
 
             new_phenotype = mutator.to_phenotype(new_genotype)
-            title = ord_dict_to_string(new_phenotype.__dict__)
+            title = ord_dict_to_string(new_genotype.__dict__)
             title_path = os.path.join(root_path, title)
             if not os.path.isdir(title_path):
                 os.makedirs(title_path)
@@ -231,9 +350,17 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
             else:
                 existing = os.listdir(title_path)
 
-            for i in range(args.runs_no):
-                # TODO: this is problematic with resumed experiments
+            for i in range(state.runs_no):
+                may_start = False
                 if str(i) not in existing:
+                    may_start = True
+                else:
+                    crash_path = os.path.join(title_path, str(i), ".__crash")
+                    if os.path.isfile(crash_path):
+                        os.remove(crash_path)
+                        may_start = True
+
+                if may_start:
                     experiment_path = os.path.join(title_path, str(i))
                     os.makedirs(experiment_path)
                     new_cfg = deepcopy(default_cfg)
@@ -270,7 +397,7 @@ def genetic_search(root_path: str, args: Namespace) -> Iterable[Args]:
 
         if step % 10 == 0:
             scores, paths = read_scores(root_path)
-            scores = to_probs(np.array(scores))
+            scores = to_probs[state.selection](np.array(scores))
 
     print("Genetics are done.")
 
@@ -407,11 +534,11 @@ def spawn_from_here(exp_args: Iterable[Args], args: Args) -> None:
 # --------------------------------------------
 # Start and detach experiments using nohup
 
-def get_max_procs(args: Args) -> int:
+def get_max_procs(state: LiftoffState) -> int:
     """Limit the number of processes by either CPU usage or GPU usage"""
-    if args.gpus:
-        return min(args.procs_no, args.per_gpu * len(args.gpus))
-    return args.procs_no
+    if state.gpus:
+        return min(state.procs_no, sum(state.per_gpu.values()))
+    return state.procs_no
 
 
 def launch(py_file: str,
@@ -446,10 +573,10 @@ def launch(py_file: str,
         env_vars = f"source activate {env:s}; {env_vars:s}"
 
     cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
-        f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
-        f" --configs-dir {exp_args.cfg_dir:s}" +\
-        f" --config-file cfg" +\
-        f" --default-config-file cfg" +\
+          f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
+          f" --configs-dir {exp_args.cfg_dir:s}" +\
+          f" --config-file cfg" +\
+          f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
           f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
@@ -485,7 +612,6 @@ def get_command(pid: PID) -> str:
 
 def still_active(pid: PID, py_file: str) -> bool:
     cmd = get_command(pid)
-    # return cmd and (py_file in cmd)  # mypy doesn't like this
     if cmd:
         return py_file in cmd
     return False
@@ -497,18 +623,50 @@ def dump_pids(path, pids):
             file_handler.write(f"{pid:d}\n")
 
 
-def run_from_system(root_path: str, timestamp: int,
+def check_web_server(state: LiftoffState,
+                     sock: socket.socket,
+                     sel: selectors.EpollSelector,
+                     port: int) -> None:
+    events = sel.select(timeout=0)
+    for key, mask in events:
+        if key.data is None:
+            new_conn, addr = sock.accept()
+            print("New connection from", addr)
+            new_conn.setblocking(False)
+            new_data = SimpleNamespace(addr=addr, inb=b'', outb=b'')
+            new_events = selectors.EVENT_READ | selectors.EVENT_WRITE
+            sel.register(new_conn, new_events, data=new_data)
+        else:
+            conn = key.fileobj
+            data = key.data
+            if mask & selectors.EVENT_READ:
+                recv_data = conn.recv(1024)
+                if recv_data:
+                    data.inb += recv_data
+                    state.process_commands(data)
+                else:
+                    print("Closing connection to ", data.addr)
+                    sel.unregister(conn)
+                    conn.close()
+            if mask & selectors.EVENT_WRITE:
+                if data.outb:
+                    sent = conn.send(data.outb)
+                    data.outb = data.outb[sent:]
+    if np.random.sample() < (1. / 60):
+        print("Don't forget: I'm listening on port", port)
+
+
+def run_from_system(state: LiftoffState,
+                    server: Optional[Tuple[socket.socket, selectors.PollSelector, int]],
+                    root_path: str, timestamp: int,
                     exp_args: Iterable[Args], args: Args) -> None:
-    active_procs: List[Tuple[PID, Optional[int]]] = []
-    max_procs_no = get_max_procs(args)
+    max_procs_no = get_max_procs(state)
     assert max_procs_no > 0, "You would have been waiting in vain..."
     crt_pid = os.getpid()
     print(f"PID of current process is {crt_pid:d}.")
     print("The maximum number of experiments in parallel will be: ",
           max_procs_no)
 
-    gpus = args.gpus
-    epg = args.per_gpu
     py_file = args.module
     py_file = py_file if py_file.endswith(".py") else py_file + ".py"
     if not os.path.isfile(py_file):
@@ -516,50 +674,61 @@ def run_from_system(root_path: str, timestamp: int,
 
     env = value_of(args, "env", None)
 
+    active_procs: Dict[int, List[PID]] = {}
+    active_pids: List[int] = []
+
     for next_args in exp_args:
         while True:
             old_active_procs = active_procs
-            active_procs = []
+            active_procs, active_pids = {}, []
             changed = False
-            for (pid, gpu) in old_active_procs:
-                if still_active(pid, py_file):
-                    active_procs.append((pid, gpu))
-                else:
-                    changed = True
-                    print(f"Process {pid:d} seems to be done.")
+            for (gpu, pids) in old_active_procs.items():
+                for pid in pids:
+                    if still_active(pid, py_file):
+                        active_procs.setdefault(gpu, []).append(pid)
+                        active_pids.append(pid)
+                    else:
+                        changed = True
+                        print(f"Process {pid:d} seems to be done.")
+
             if changed:
-                dump_pids(root_path, [pid for (pid, _) in active_procs])
-            if len(active_procs) < max_procs_no:
+                dump_pids(root_path, active_pids)
+
+            if len(active_pids) < get_max_procs(state):
                 break
             else:
+                check_web_server(state, *server)
                 time.sleep(1)
 
         gpu = None
-        for gpu_j in gpus:
-            if len([_ for (_, _g) in active_procs if _g == gpu_j]) < epg:
+        for gpu_j in state.gpus:
+            if len(active_procs.get(gpu_j, [])) < state.per_gpu[gpu_j]:
                 gpu = gpu_j
                 break
         new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
                          env, gpu=gpu, omp=args.omp, mkl=args.mkl)
-        active_procs.append((new_pid, gpu))
-        dump_pids(root_path, [pid for (pid, _) in active_procs])
+        active_procs.setdefault(gpu, []).append(new_pid)
+        active_pids.append(new_pid)
+        dump_pids(root_path, active_pids)
 
     wait_time = 1
-    while active_procs:
+    while active_pids:
         time.sleep(wait_time)
         wait_time = min(wait_time + 1, 30)
-        old_active_procs, active_procs, changed = active_procs, [], False
-        for (pid, gpu) in old_active_procs:
+        old_active_pids = active_pids
+        active_pids = []
+        changed = False
+        for pid in old_active_pids:
             if still_active(pid, py_file):
-                active_procs.append((pid, gpu))
+                active_pids.append(pid)
             else:
                 changed = True
                 wait_time = 1
                 print(f"Process {pid:d} seems to be done.")
-        if changed and active_procs:
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
+        if changed and active_pids:
+            dump_pids(root_path, active_pids)
             print("Still active: " +
-                  ",".join([str(pid) for (pid, _) in active_procs]) +
+                  ",".join([str(pid) for pid in active_pids]) +
                   ". Stop this at any time with no risks.")
 
     print(clr("All done!", attrs=["bold"]))
@@ -628,7 +797,8 @@ def evolve():
 
     # You need to build the generator
 
-    exp_args = genetic_search(root_path, args)
+    state = LiftoffState(args, evolves=True)
+    exp_args = genetic_search(state, root_path, args)
 
     # At this point you need to have root_path, exp_args, timestamp, exp_args
 
@@ -639,12 +809,27 @@ def evolve():
     else:
         with open(os.path.join(root_path, ".__mode"), "w") as m_file:
             m_file.write("nohup\n")
-        run_from_system(root_path, timestamp, exp_args, args)
+        sel = selectors.DefaultSelector()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        port = 9876
+        while True:
+            try:
+                sock.bind(("127.0.0.1", port))
+                break
+            except OSError as _exc:
+                port = np.random.randint(9000, 20000)
+        print("Port is", port)
+        sock.listen()
+        sock.setblocking(False)
+        sel.register(sock, selectors.EVENT_READ, data=None)
+        run_from_system(state, (sock, sel, port),
+                        root_path, timestamp, exp_args, args)
 
 
 def main():
     welcome()
     args = parse_args()
+
     print(config_to_string(args))
 
     # Read configuration files
@@ -735,9 +920,24 @@ def main():
             m_file.write("multiprocess\n")
         spawn_from_here(exp_args, args)
     else:
+        state = LiftoffState(args, evolves=False)
         with open(os.path.join(root_path, ".__mode"), "w") as m_file:
             m_file.write("nohup\n")
-        run_from_system(root_path, timestamp, exp_args, args)
+        sel = selectors.DefaultSelector()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        port = 9876
+        while True:
+            try:
+                sock.bind(("127.0.0.1", port))
+                break
+            except OSError:
+                port = np.random.randint(9000, 20000)
+        print("Port is", port)
+        sock.listen()
+        sock.setblocking(False)
+        sel.register(sock, selectors.EVENT_READ, data=None)
+        run_from_system(state, (sock, sel, port),
+                        root_path, timestamp, exp_args, args)
 
 
 if __name__ == "__main__":

@@ -27,3 +27,8 @@ def abort():
 def elite():
     from liftoff.elite import elite as _elite
     _elite()
+
+
+def please_do():
+    from liftoff.the_client import main as _do
+    _do()
