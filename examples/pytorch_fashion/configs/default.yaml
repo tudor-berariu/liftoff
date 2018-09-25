@@ -1,0 +1,18 @@
+batch_size: 1024
+test_batch_size: 10000
+
+training:
+  epochs: 10
+
+optimizer:
+  lr: .01
+  momentum: .9
+  nesterov: yes
+
+no_cuda: no
+log_interval: 5000
+
+meta:
+  crossover: .1
+  random: .01
+  selection: squared_rank

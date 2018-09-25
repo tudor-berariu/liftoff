@@ -1,0 +1,30 @@
+batch_size:
+  gtype: ptwo
+  min_power: 2
+  max_power: 10
+
+optimizer:
+  lr:
+    gtype: number
+    precision: 1
+    positive: yes
+    avoid_zero: yes
+    min_order: -6
+    max_order: -1
+
+  momentum:
+    gtype: number
+    precision: 2
+    positive: yes
+    min_order: -2
+    max_order: -2
+
+  nesterov:
+    gtype: set
+    domain: [True, False]
+
+meta:
+  crossover: .1
+  random: .01
+  selection: squared_rank
+
