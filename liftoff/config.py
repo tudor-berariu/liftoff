@@ -21,11 +21,10 @@ def dict_to_namespace(dct: dict) -> Namespace:
     """Deep (recursive) transform from Namespace to dict"""
     namespace = Namespace()
     for key, value in dct.items():
-        name = key.rstrip("_")
-        if isinstance(value, dict) and not key.endswith("_"):
-            setattr(namespace, name, dict_to_namespace(value))
+        if isinstance(value, dict) and not key.startswith("_"):
+            setattr(namespace, key, dict_to_namespace(value))
         else:
-            setattr(namespace, name, value)
+            setattr(namespace, key, value)
     return namespace
 
 
