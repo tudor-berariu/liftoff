@@ -98,7 +98,8 @@ def collect_results(timestamp: Optional[str] = None,
     if experiment_full_name:
         exp_dirs = [experiment_full_name]
     else:
-        exp_dirs: List[str] = os.listdir(results_dir)
+        exp_dirs = [d for d in os.listdir(results_dir)
+                    if os.path.isdir(os.path.join(results_dir, d))]
 
     if experiment_name:
         regex: str = f"\\d+_{experiment_name:s}"
@@ -196,7 +197,8 @@ def collect_all_results(timestamp: Optional[str] = None,
 
     results = []
 
-    exp_dirs: List[str] = os.listdir(results_dir)
+    exp_dirs = [d for d in os.listdir(results_dir)
+                if os.path.isdir(os.path.join(results_dir, d))]
 
     regex: str = f"\\d+_.*"
     exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
