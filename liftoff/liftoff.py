@@ -4,6 +4,7 @@ from argparse import ArgumentParser, Namespace
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from types import SimpleNamespace
 from copy import deepcopy
+import hashlib
 import sys
 import os
 from functools import partial
@@ -343,6 +344,8 @@ def genetic_search(state: LiftoffState,
 
             new_phenotype = mutator.to_phenotype(new_genotype)
             title = ord_dict_to_string(new_genotype.__dict__)
+            if len(title) > 200:
+                title = hashlib.md5(title.encode('utf-8')).hexdigest()
             title_path = os.path.join(root_path, title)
             if not os.path.isdir(title_path):
                 os.makedirs(title_path)
