@@ -53,11 +53,11 @@ def random_number(avoid_zero: bool = None,
 
 
 def check_number(value: object,
-                 avoid_zero: bool=None,
-                 positive: bool=None,
-                 min_order: int=None,
-                 max_order: int=None,
-                 precision: int=None) -> bool:
+                 avoid_zero: bool = None,
+                 positive: bool = None,
+                 min_order: int = None,
+                 max_order: int = None,
+                 precision: int = None) -> bool:
     if not isinstance(value, list) or len(value) != 2:
         return False
     digit, order = list(map(int, value))
@@ -192,7 +192,10 @@ class Mutator:
         for (var_name, (var_type, kwargs)) in self.variables.items():
             if var_name not in args:
                 return False
-            if not Mutator.CHECK_FS[var_type](getattr(args, var_name), **kwargs):
+            raw_value = getattr(args, var_name)
+            if raw_value == "delete":
+                continue
+            if not Mutator.CHECK_FS[var_type](raw_value, **kwargs):
                 return False
         return True
 
@@ -219,10 +222,13 @@ class Mutator:
                 if not hasattr(sub_cfg, element_name):
                     setattr(sub_cfg, element_name, Namespace())
                 sub_cfg = getattr(sub_cfg, element_name)
-            if var_type == "number":
-                value = to_number(getattr(genotype, var_name))
+            raw_value = getattr(genotype, var_name)
+            if raw_value == "delete":
+                value = "delete"
+            elif var_type == "number":
+                value = to_number(raw_value)
             else:
-                value = deepcopy(getattr(genotype, var_name))
+                value = deepcopy(raw_value)
             setattr(sub_cfg, elements[-1], value)
         return phenotype
 

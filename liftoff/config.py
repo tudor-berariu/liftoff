@@ -44,8 +44,10 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
                 _update_config(getattr(default_cfg, key), value)
             else:
                 setattr(default_cfg, key, value)
-        else:
+        elif value != "delete":
             setattr(default_cfg, key, value)
+        else:
+            delattr(default_cfg, key)
 
 
 def config_to_string(cfg: Namespace, indent: int = 0) -> str:
