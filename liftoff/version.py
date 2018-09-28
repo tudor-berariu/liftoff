@@ -23,12 +23,16 @@ def get_commit():
 
 def version() -> str:
     commit = get_commit()
-    return "0.2" + commit
+    return "0.2.1" + commit
+
+
+def welcome_msg() -> str:
+    return f"\nThis is {clr('Liftoff', 'yellow', attrs=['bold']):s}" \
+        f" {version():s}.\n"
 
 
 def welcome() -> None:
-    print(f"\nThis is {clr('Liftoff', 'yellow', attrs=['bold']):s}"
-          f" {version():s}.\n")
+    print(welcome_msg())
 
 
 if __name__ == "__main__":

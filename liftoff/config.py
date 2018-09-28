@@ -50,16 +50,19 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
             delattr(default_cfg, key)
 
 
-def config_to_string(cfg: Namespace, indent: int = 0) -> str:
+def config_to_string(cfg: Namespace, indent: int = 0,
+                     color: bool = True) -> str:
     """Creates a multi-line string with the contents of @cfg."""
 
     text = ""
     for key, value in cfg.__dict__.items():
-        text += " " * indent + clr(key, "yellow") + ": "
+        ckey = clr(key, "yellow") if color else key
+        text += " " * indent + ckey + ": "
         if isinstance(value, Namespace):
-            text += "\n" + config_to_string(value, indent + 2)
+            text += "\n" + config_to_string(value, indent + 2, color=color)
         else:
-            text += clr(str(value), "red") + "\n"
+            cvalue = clr(str(value), "red") if color else str(value)
+            text += cvalue + "\n"
     return text
 
 
