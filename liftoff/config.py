@@ -46,7 +46,7 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
                 setattr(default_cfg, key, value)
         elif value != "delete":
             setattr(default_cfg, key, value)
-        else:
+        elif hasattr(default_cfg, key):
             delattr(default_cfg, key)
 
 
