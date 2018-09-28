@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='liftoff',
-      version='0.2',
+      version='0.2.1',
       description='Experiment launcher; AGI assistant',
       entry_points={
           'console_scripts': [
@@ -12,6 +12,7 @@ setup(name='liftoff',
               'liftoff-abort=liftoff.cmd:abort',
               'liftoff-elite=liftoff.cmd:elite',
               'liftoff-do=liftoff.cmd:please_do',
+              'liftoff-errors=liftoff.cmd:errors',
           ],
       },
       url='https://github.com/tudor-berariu/liftoff',
@@ -23,5 +24,6 @@ setup(name='liftoff',
           'pyyaml',
           'tabulate',
           'termcolor',
+          'urwid',
       ],
       zip_safe=False)

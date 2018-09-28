@@ -32,3 +32,8 @@ def elite():
 def please_do():
     from liftoff.the_client import main as _do
     _do()
+
+
+def errors():
+    from liftoff.errors import main as _errors
+    _errors()
