@@ -238,7 +238,6 @@ def get_mutator(cfg: Namespace) -> Mutator:
     tmp_vars = [("", cfg)]
     final_vars = {}
     while tmp_vars:
-        print(tmp_vars)
         prev_path, sub_cfg = tmp_vars.pop(0)
         if "gtype" in sub_cfg.keys():
             kwargs = {k: v for (k, v) in sub_cfg.items() if k != "gtype"}
@@ -249,12 +248,18 @@ def get_mutator(cfg: Namespace) -> Mutator:
                     assert "." not in key
                     new_path = ((prev_path + ".") if prev_path else "") + key
                     tmp_vars.append((new_path, value))
-    if hasattr(cfg, "constraints"):
-        constraints = namespace_to_dict(cfg.constraints)
+    if "constraints" in cfg:
+        new_constraints = {}
+        constraints = cfg["constraints"]  # namespace_to_dict(cfg.constraints)
         for var_name, var_constraints in constraints.items():
+            new_constraints[var_name] = cvar = {}
             for value, tuples in var_constraints.items():
-                for var_name, _value in tuples:
-                    assert var_name in final_vars
+                cvar[value] = []
+                for dct in tuples:
+                    for (other_name, other_value) in dct.items():
+                        cvar[value].append((other_name, other_value))
+                        assert other_name in final_vars
+        constraints = new_constraints
     else:
         constraints = {}
     return Mutator(final_vars, constraints)
