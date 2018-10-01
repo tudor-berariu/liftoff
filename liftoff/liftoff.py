@@ -284,7 +284,7 @@ def genetic_search(state: LiftoffState,
     # -- TODO: Improve this
 
     state.crossover = .5
-    state.random = 0.
+    state.random = 0.05
     steps = 100
     state.selection = "roulette"
 
@@ -295,6 +295,8 @@ def genetic_search(state: LiftoffState,
             steps = genotype_cfg.meta.steps
         if hasattr(genotype_cfg.meta, "selection"):
             state.selection = genotype_cfg.meta.selection
+        if hasattr(genotype_cfg.meta, "random"):
+            state.selection = genotype_cfg.meta.random
     print("Using", state.selection, "selection!")
 
     # ---
