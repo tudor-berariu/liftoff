@@ -147,6 +147,12 @@ class Mutator:
         "set": mutate_set_member
     }
 
+    SAMPLE_FS = {
+        "number": random_number,
+        "ptwo": random_power_of_two,
+        "set": random_from_set
+    }
+
     CHECK_FS = {
         "number": check_number,
         "ptwo": check_power_of_two,
@@ -170,7 +176,11 @@ class Mutator:
         genotype = deepcopy(old_genotype)
         var_name = np.random.choice(list(self.variables.keys()))
         var_type, kwargs = self.variables[var_name]
-        new_value = Mutator.MUTATE_FS[var_type](genotype.__dict__[var_name], **kwargs)
+        old_value = genotype.__dict__[var_name]
+        if old_value == "delete":
+            new_value = Mutator.SAMPLE_FS[var_type](**kwargs)
+        else:
+            new_value = Mutator.MUTATE_FS[var_type](old_value, **kwargs)
         genotype.__dict__[var_name] = new_value
         correct_args(genotype, self.constraints)
         print("Mutated\n{}to\n{}".format(config_to_string(old_genotype),
