@@ -51,11 +51,15 @@ class LiftoffState:
         self._evolves = evolves
         self.selection = ""
         self.crossover = .1
+        self.random = .005
+        self.drop_below_zero = True
 
         self._components = ["gpus", "procs_no", "per_gpu"]
 
         if evolves:
-            self._components.extend(["selection", "crossover", "random", "runs_no"])
+            self._components.extend(["selection", "crossover", "random",
+                                     "drop_below_zero",
+                                     "runs_no"])
 
     @property
     def table(self) -> str:
@@ -235,7 +239,7 @@ def parse_args() -> Args:
     return arg_parser.parse_known_args()[0]
 
 
-def read_scores(root_path: str) -> Tuple[List[str], List[float]]:
+def read_scores(root_path: str, drop_below_zero: bool) -> Tuple[List[str], List[float]]:
     scores, paths = [], []
     nscores = 0
     for rel_path, _dirs, files in os.walk(root_path):
@@ -243,6 +247,8 @@ def read_scores(root_path: str) -> Tuple[List[str], List[float]]:
             continue
         with open(os.path.join(rel_path, "fitness")) as handler:
             fitness = float(handler.readline().strip())
+            if fitness < 0 and drop_below_zero:
+                continue
             paths.append(os.path.join(rel_path, 'genotype.yaml'))
             scores.append(fitness)
             nscores += 1
@@ -296,8 +302,11 @@ def genetic_search(state: LiftoffState,
         if hasattr(genotype_cfg.meta, "selection"):
             state.selection = genotype_cfg.meta.selection
         if hasattr(genotype_cfg.meta, "random"):
-            state.selection = genotype_cfg.meta.random
-    print("Using", state.selection, "selection!")
+            state.random = genotype_cfg.meta.random
+        if hasattr(genotype_cfg.meta, "drop_below_zero"):
+            state.drop_below_zero = genotype_cfg.meta.drop_below_zero
+
+    print(state.table)
 
     # ---
 
@@ -308,7 +317,7 @@ def genetic_search(state: LiftoffState,
                 'squared_rank': square_rank_probs}
 
     step = 0
-    scores, paths = read_scores(root_path)
+    scores, paths = read_scores(root_path, state.drop_below_zero)
     scores = to_probs[state.selection](np.array(scores))
 
     while step < steps and not state.do_quit:
@@ -401,7 +410,7 @@ def genetic_search(state: LiftoffState,
         step += 1
 
         if step % 10 == 0:
-            scores, paths = read_scores(root_path)
+            scores, paths = read_scores(root_path, state.drop_below_zero)
             scores = to_probs[state.selection](np.array(scores))
 
     print("Genetics are done.")
