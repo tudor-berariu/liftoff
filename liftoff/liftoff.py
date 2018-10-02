@@ -118,6 +118,8 @@ class LiftoffState:
                     func = float
                 elif words[1] in ["runs_no", "procs_no"]:
                     func = int
+                elif words[1] in ["drop_below_zero"]:
+                    def func(x): return bool(int(x))
                 else:
                     func = str
                 try:
