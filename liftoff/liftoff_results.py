@@ -102,7 +102,7 @@ def collect_results(timestamp: Optional[str] = None,
                     if os.path.isdir(os.path.join(results_dir, d))]
 
     if experiment_name:
-        regex: str = f"\\d+_{experiment_name:s}"
+        regex: str = f"\\d+_{experiment_name:s}$"
         exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
 
     if timestamp:
