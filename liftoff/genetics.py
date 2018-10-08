@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 from argparse import Namespace
 import numpy as np
@@ -18,26 +18,30 @@ def mutate_number(value: Tuple[int, int],
                   positive: bool = True,
                   min_order: int = 0,
                   max_order: int = 5,
-                  precision: int = 1) -> Tuple[int, int]:
+                  precision: int = 1,
+                  momentum: Optional[int] = None) -> Tuple[Tuple[int, int], int]:
+
     digit, order = value
     limit = 10 ** precision - 1
     changed = False
+    old_momentum = momentum
     while not changed:
         sample = np.random.sample()
-        if sample < .25 and order < max_order:
-            order, changed = order + 1, True
-        elif sample < .5 and order > min_order:
-            order, changed = order - 1, True
-        elif sample < .75 and digit < limit:
+        if (old_momentum == 0 or sample < .25) and order < max_order:
+            order, changed, momentum = order + 1, True, 0
+        elif (old_momentum == 1 or sample < .5) and order > min_order:
+            order, changed, momentum = order - 1, True, 1
+        elif (old_momentum == 2 or sample < .75) and digit < limit:
             digit += 2 if (digit == -1 and avoid_zero) else 1
-            changed = True
+            changed, momentum = True, 2
         elif (not positive and digit > -limit):
             digit -= 2 if (digit == 1 and avoid_zero) else 1
-            changed = True
+            changed, momentum = True, 3
         elif (not avoid_zero and digit > 0) or digit > 1:
             digit -= 1
-            changed = True
-    return [digit, order]
+            changed, momentum = True, 3
+        old_momentum = None
+    return [digit, order], momentum
 
 
 def random_number(avoid_zero: bool = None,
@@ -78,17 +82,24 @@ def check_number(value: object,
 
 # -- Powers of two
 
-def mutate_power_of_two(value: float, min_power=0, max_power=10) -> float:
+def mutate_power_of_two(value: float,
+                        min_power: int = 0,
+                        max_power: int = 10,
+                        momentum: Optional[int] = None) -> Tuple[float, int]:
     crt_power = int(np.log(value) / np.log(2))
+    old_momentum = momentum
     while True:
         sample = np.random.sample()
-        if sample < .5 and crt_power > min_power:
+        if (old_momentum == 0 or sample < .5) and crt_power > min_power:
             crt_power -= 1
+            momentum = 0
             break
         elif crt_power < max_power:
             crt_power += 1
+            momentum = 1
             break
-    return 2 ** crt_power
+        old_momentum = None
+    return 2 ** crt_power, momentum
 
 
 def random_power_of_two(min_power: int = 0, max_power: int = 10) -> float:
@@ -107,11 +118,13 @@ def check_power_of_two(value: object, min_power=None, max_power=None) -> None:
 
 # -- Categorical
 
-def mutate_set_member(value: object, domain: List[object]) -> object:
+def mutate_set_member(value: object,
+                      domain: List[object],
+                      momentum: Optional[int] = None) -> object:
     new_value = domain[np.random.randint(len(domain))]
     while value == new_value and len(domain) > 1:
         new_value = domain[np.random.randint(len(domain))]
-    return new_value
+    return new_value, 0  # no momentum for categorical values
 
 
 def check_set_member(value: object, domain: List[object]) -> bool:
@@ -127,8 +140,10 @@ def random_from_set(domain: List[object]) -> object:
 def correct_args(args: Namespace,
                  constraints: Dict[str, Dict[object, List[Tuple[str, object]]]]
                  ) -> None:
+    chain_length, max_chain_length = 0, 100
     to_check = [var_name for var_name in constraints.keys()]
     while to_check:
+        assert chain_length < max_chain_length, "To many constrains... looping?"
         var_name = to_check.pop(0)
         if var_name in constraints:
             cons = constraints[var_name]
@@ -137,6 +152,7 @@ def correct_args(args: Namespace,
                 for var, val in cons[value]:
                     setattr(args, var, val)
                     to_check.append(var)
+        chain_length += 1
 
 
 class Mutator:
@@ -172,18 +188,56 @@ class Mutator:
                 for other_var_name, _other_var_value in assoc:
                     assert other_var_name in variables
 
-    def mutate(self, old_genotype: Namespace) -> Namespace:
-        genotype = deepcopy(old_genotype)
-        var_name = np.random.choice(list(self.variables.keys()))
+    def mutate(self,
+               parent_genotype: Namespace,
+               parent_fitness: Optional[float] = None,
+               follow_momentum: bool = False) -> Namespace:
+        grandma_fitness, parent_mutation, parent_momentum = None, None, None
+        genotype = deepcopy(parent_genotype)
+
+        if hasattr(genotype, "meta"):
+            if hasattr(genotype.meta, "parent_fitness"):
+                grandma_fitness = genotype.meta.parent_fitness
+            if hasattr(genotype.meta, "mutation"):
+                parent_mutation = genotype.meta.mutation
+            if hasattr(parent_genotype.meta, "momentum"):
+                parent_momentum = genotype.meta.momentum
+
+        var_name, momentum = None, None
+
+        if follow_momentum and parent_fitness is not None:
+            if parent_fitness < grandma_fitness:
+                # Drop momentum if it did no good
+                if hasattr(parent_momentum, parent_mutation):
+                    delattr(parent_mutation, parent_mutation)
+            if parent_mutation.__dict__:
+                var_name = np.random.choice(list(parent_momentum.__dict__.keys()))
+                momentum = getattr(parent_momentum, var_name)
+
+        if var_name is None:
+            var_name = np.random.choice(list(self.variables.keys()))
+
         var_type, kwargs = self.variables[var_name]
         old_value = genotype.__dict__[var_name]
         if old_value == "delete":
             new_value = Mutator.SAMPLE_FS[var_type](**kwargs)
         else:
-            new_value = Mutator.MUTATE_FS[var_type](old_value, **kwargs)
-        genotype.__dict__[var_name] = new_value
+            new_value, momentum = Mutator.MUTATE_FS[var_type](old_value,
+                                                              momentum=momentum,
+                                                              **kwargs)
+
+        setattr(genotype, var_name, new_value)
+        if not hasattr(genotype, "meta"):
+            genotype.meta = Namespace()
+        genotype.meta.parent_fitness = parent_fitness
+        genotype.meta.mutation = var_name
+        if not hasattr(genotype.meta, "momentum"):
+            genotype.meta.momentum = Namespace()
+        setattr(genotype.meta.momentum, var_name, momentum)
+        genotype.meta.source = "mutation"
+
         correct_args(genotype, self.constraints)
-        print("Mutated\n{}to\n{}".format(config_to_string(old_genotype),
+        print("Mutated\n{}to\n{}".format(config_to_string(parent_genotype),
                                          config_to_string(genotype)))
         return genotype
 
@@ -192,6 +246,7 @@ class Mutator:
         for var_name in self.variables.keys():
             if np.random.sample() < .5:
                 child.__dict__[var_name] = parent2.__dict__[var_name]
+        child.meta = Namespace(source="crossover")
         correct_args(child, self.constraints)
         print("Combined\n{}and\n{}into\n{}".format(config_to_string(parent1),
                                                    config_to_string(parent2),
@@ -220,6 +275,7 @@ class Mutator:
                 setattr(genotype, var_name, random_from_set(**kwargs))
             else:
                 raise ValueError
+        genotype.meta = Namespace(source="sample")
         correct_args(genotype, self.constraints)
         return genotype
 
