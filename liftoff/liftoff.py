@@ -22,6 +22,7 @@ from termcolor import colored as clr
 import numpy as np
 from numpy.random import shuffle
 from tabulate import tabulate
+import shutil
 
 from .config import read_config, namespace_to_dict, config_to_string,\
     value_of, dict_to_namespace, _update_config as update_config
@@ -761,7 +762,7 @@ def evolve():
     experiment_path = f"{args.configs_dir}/{args.experiment:s}"
     assert os.path.isdir(experiment_path)
     assert os.path.isfile(f"{experiment_path}/default.yaml")
-    assert os.path.isfile(f"./configs/{args.experiment:s}/genotype.yaml")
+    assert os.path.isfile(f"{experiment_path:s}/genotype.yaml")
 
     root_path: str = None
     timestamp: Optional[int] = None
@@ -804,6 +805,9 @@ def evolve():
         os.makedirs(root_path)
         with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
             t_file.write(f"{timestamp:d}\n")
+
+        shutil.copyfile(os.path.join(experiment_path, "genotype.yaml"),
+                        os.path.join(root_path, "genotype.yaml"))
 
     with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
         ppid_file.write(f"{os.getpid():d}\n")
