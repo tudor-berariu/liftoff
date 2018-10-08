@@ -50,15 +50,19 @@ class LiftoffState:
         self.per_gpu = {g: args.per_gpu for g in args.gpus}
 
         self._evolves = evolves
-        self.selection = ""
+        self.selection = "squared_rank"
+        # TODO: review default values
         self.crossover = .1
         self.random = .005
+        self.momentum = 1 - self.crossover - self.random - .1
+        self.steps = 100
         self.drop_below_zero = True
 
         self._components = ["gpus", "procs_no", "per_gpu"]
 
         if evolves:
             self._components.extend(["selection", "crossover", "random",
+                                     "momentum", "steps"
                                      "drop_below_zero",
                                      "runs_no"])
 
@@ -115,9 +119,9 @@ class LiftoffState:
             elif words[1] not in self._components:
                 answers.append(f"Unknown field {words[1]:s}.")
             elif words[1] != "per_gpu":
-                if words[1] in ["random", "crossover"]:
+                if words[1] in ["random", "crossover", "momentum"]:
                     func = float
-                elif words[1] in ["runs_no", "procs_no"]:
+                elif words[1] in ["runs_no", "procs_no", "steps"]:
                     func = int
                 elif words[1] in ["drop_below_zero"]:
                     def func(x): return bool(int(x))
@@ -242,8 +246,9 @@ def parse_args() -> Args:
     return arg_parser.parse_known_args()[0]
 
 
-def read_scores(root_path: str, drop_below_zero: bool) -> Tuple[List[str], List[float]]:
-    scores, paths = [], []
+def read_fitness(root_path: str,
+                 drop_below_zero: bool) -> Tuple[List[str], List[float]]:
+    fitnesss, paths = [], []
     nscores = 0
     for rel_path, _dirs, files in os.walk(root_path):
         if not all((f in files) for f in ['.__leaf', 'genotype.yaml', 'fitness']):
@@ -253,10 +258,10 @@ def read_scores(root_path: str, drop_below_zero: bool) -> Tuple[List[str], List[
             if fitness < 0 and drop_below_zero:
                 continue
             paths.append(os.path.join(rel_path, 'genotype.yaml'))
-            scores.append(fitness)
+            fitnesss.append(fitness)
             nscores += 1
     print(f"[Main] {nscores:d} scores found.")
-    return scores, paths
+    return fitnesss, paths
 
 
 def roulette_probs(scores: np.ndarray) -> np.ndarray:
@@ -292,16 +297,13 @@ def genetic_search(state: LiftoffState,
 
     # -- TODO: Improve this
 
-    state.crossover = .5
-    state.random = 0.05
-    steps = 100
-    state.selection = "roulette"
-
     if hasattr(genotype_cfg, "meta"):
         if hasattr(genotype_cfg.meta, "crossover"):
             state.crossover = genotype_cfg.meta.crossover
+        if hasattr(genotype_cfg.meta, "momentum"):
+            state.momentum = genotype_cfg.meta.momentum
         if hasattr(genotype_cfg.meta, "steps"):
-            steps = genotype_cfg.meta.steps
+            state.steps = genotype_cfg.meta.steps
         if hasattr(genotype_cfg.meta, "selection"):
             state.selection = genotype_cfg.meta.selection
         if hasattr(genotype_cfg.meta, "random"):
@@ -320,10 +322,10 @@ def genetic_search(state: LiftoffState,
                 'squared_rank': square_rank_probs}
 
     step = 0
-    scores, paths = read_scores(root_path, state.drop_below_zero)
-    scores = to_probs[state.selection](np.array(scores))
+    fitnesss, paths = read_fitness(root_path, state.drop_below_zero)
+    scores = to_probs[state.selection](np.array(fitnesss))
 
-    while step < steps and not state.do_quit:
+    while step < state.steps and not state.do_quit:
         print(f"[Main] Step {step:d}.")
         found = False
         while not found:
@@ -346,15 +348,20 @@ def genetic_search(state: LiftoffState,
             elif scores.size == 0 or probe < state.random:
                 print("[Main] Generating random experiment.")
                 new_genotype = mutator.sample()
-            elif np.random.sample() < state.crossover:
+            elif probe < state.crossover + state.random:
                 print("[Main] Generating child experiment through crossover.")
                 parent1 = read_genotype(np.random.choice(paths, p=scores))
                 parent2 = read_genotype(np.random.choice(paths, p=scores))
                 new_genotype = mutator.crossover(parent1, parent2)
             else:
                 print("[Main] Mutating some experiment.")
-                parent = read_genotype(np.random.choice(paths, p=scores))
-                new_genotype = mutator.mutate(parent)
+                rand_idx = np.random.choice(range(len(scores)), p=scores)
+                parent_genotype = read_genotype(paths[rand_idx])
+                parent_fitness = fitnesss[rand_idx]
+                threshold = state.momentum + state.crossover + state.random
+                new_genotype = mutator.mutate(parent_genotype,
+                                              parent_fitness=parent_fitness,
+                                              follow_momentum=(probe < threshold))
 
             new_phenotype = mutator.to_phenotype(new_genotype)
             title = ord_dict_to_string(new_genotype.__dict__)
@@ -413,8 +420,8 @@ def genetic_search(state: LiftoffState,
         step += 1
 
         if step % 10 == 0:
-            scores, paths = read_scores(root_path, state.drop_below_zero)
-            scores = to_probs[state.selection](np.array(scores))
+            fitnesss, paths = read_fitness(root_path, state.drop_below_zero)
+            scores = to_probs[state.selection](np.array(fitnesss))
 
     print("Genetics are done.")
 
