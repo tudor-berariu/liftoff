@@ -337,6 +337,7 @@ def genetic_search(state: LiftoffState,
                         try:
                             manual_path = os.path.join(to_run_path, fname)
                             new_genotype = read_genotype(manual_path)
+                            new_genotype.meta = Namespace(source="manual")
                             break
                         except Exception as exc:
                             os.remove(manual_path)

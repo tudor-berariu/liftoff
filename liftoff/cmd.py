@@ -1,4 +1,3 @@
-
 def launch():
     from liftoff.liftoff import main as _launch
     _launch()
@@ -37,3 +36,8 @@ def please_do():
 def errors():
     from liftoff.errors import main as _errors
     _errors()
+
+
+def manual_add():
+    from liftoff.elite import manual_add as _manual_add
+    _manual_add()

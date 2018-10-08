@@ -6,6 +6,10 @@ import numpy as np
 from liftoff.config import namespace_to_dict, config_to_string
 
 
+class GenotypeException(Exception):
+    pass
+
+
 # -- Numbers  digit ** (10 ** order)
 
 def to_number(value: Tuple[int, int]) -> float:
@@ -63,20 +67,20 @@ def check_number(value: object,
                  max_order: int = None,
                  precision: int = None) -> bool:
     if not isinstance(value, list) or len(value) != 2:
-        return False
+        raise GenotypeException("Expected list of size 2, found " + str(value))
     digit, order = list(map(int, value))
     if avoid_zero and (digit == 0):
-        return False
+        raise GenotypeException("Zero value for non-zero variable")
     if positive and digit < 0:
-        return False
+        raise GenotypeException("Negative value for positive variable")
     if precision is not None:
         limit = 10 ** precision - 1
         if digit > limit or digit < -limit:
-            return False
+            raise GenotypeException("Value " + str(digit) + " outside limits")
     if min_order is not None and order < min_order:
-        return False
+        raise GenotypeException("Order " + order + " less than minimum of " + str(min_order))
     if max_order is not None and order > max_order:
-        return False
+        raise GenotypeException("Order " + order + " more than maximum of " + str(max_order))
     return True
 
 
@@ -110,9 +114,9 @@ def random_power_of_two(min_power: int = 0, max_power: int = 10) -> float:
 def check_power_of_two(value: object, min_power=None, max_power=None) -> None:
     crt_power = int(np.log(value) / np.log(2))
     if min_power is not None and crt_power < min_power:
-        return False
+        raise GenotypeException("Power " + str(crt_power) + " less than minimum of " + str(min_power))
     if max_power is not None and crt_power > max_power:
-        return False
+        raise GenotypeException("Power " + str(crt_power) + " more than maximum of " + str(min_power))
     return True
 
 
@@ -128,7 +132,9 @@ def mutate_set_member(value: object,
 
 
 def check_set_member(value: object, domain: List[object]) -> bool:
-    return value in domain
+    if value not in domain:
+        raise GenotypeException("Value " + str(value) + " not in domain")
+    return True
 
 
 def random_from_set(domain: List[object]) -> object:
@@ -253,15 +259,14 @@ class Mutator:
                                                    config_to_string(child)))
         return child
 
-    def check_args(self, args: Namespace) -> bool:
+    def check_genotype(self, args: Namespace) -> bool:
         for (var_name, (var_type, kwargs)) in self.variables.items():
             if var_name not in args:
-                return False
+                raise GenotypeException("Unknown variable " + str(var_name))
             raw_value = getattr(args, var_name)
             if raw_value == "delete":
                 continue
-            if not Mutator.CHECK_FS[var_type](raw_value, **kwargs):
-                return False
+            Mutator.CHECK_FS[var_type](raw_value, **kwargs)
         return True
 
     def sample(self) -> Namespace:
