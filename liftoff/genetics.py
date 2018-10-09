@@ -27,6 +27,7 @@ def mutate_number(value: Tuple[int, int],
 
     digit, order = value
     limit = 10 ** precision - 1
+    step_interval = (1, 5 ** (precision - 1) + 1)
     changed = False
     old_momentum = momentum
     while not changed:
@@ -36,13 +37,22 @@ def mutate_number(value: Tuple[int, int],
         elif (old_momentum == 1 or sample < .5) and order > min_order:
             order, changed, momentum = order - 1, True, 1
         elif (old_momentum == 2 or sample < .75) and digit < limit:
-            digit += 2 if (digit == -1 and avoid_zero) else 1
+            digit += np.random.randint(*step_interval)
+            if digit == 0 and avoid_zero:
+                digit += 1
+            digit = min(digit, limit)
             changed, momentum = True, 2
-        elif (not positive and digit > -limit):
-            digit -= 2 if (digit == 1 and avoid_zero) else 1
+        elif not positive and digit > -limit:
+            digit -= np.random.randint(*step_interval)
+            if digit == 0 and avoid_zero:
+                digit -= 1
+            digit = max(digit, -limit)
             changed, momentum = True, 3
         elif (not avoid_zero and digit > 0) or digit > 1:
-            digit -= 1
+            digit -= np.random.randint(*step_interval)
+            if digit == 0 and avoid_zero:
+                digit += 1
+            digit = max(digit, (1 if avoid_zero else 0))
             changed, momentum = True, 3
         old_momentum = None
     return [digit, order], momentum
@@ -199,6 +209,7 @@ class Mutator:
                parent_fitness: Optional[float] = None,
                follow_momentum: bool = False) -> Namespace:
         grandma_fitness, parent_mutation, parent_momentum = None, None, None
+        parent_generation = 0
         genotype = deepcopy(parent_genotype)
 
         if hasattr(genotype, "meta"):
@@ -208,12 +219,17 @@ class Mutator:
                 parent_mutation = genotype.meta.mutation
             if hasattr(parent_genotype.meta, "momentum"):
                 parent_momentum = genotype.meta.momentum
+            if hasattr(parent_genotype.meta, "generation"):
+                # if parent has generation info
+                parent_generation = genotype.meta.generation
 
         var_name, momentum = None, None
 
         if follow_momentum and parent_fitness is not None:
             if grandma_fitness is not None and parent_fitness < grandma_fitness:
-                # Drop momentum if it did no good
+                # Drop momentum on mutated variable if it did no good
+                # Reset generation (not sure if this is the best way to do it)
+                parent_generation = 0
                 if hasattr(parent_momentum, parent_mutation):
                     delattr(parent_momentum, parent_mutation)
             if parent_momentum is not None and parent_momentum.__dict__:
@@ -240,6 +256,8 @@ class Mutator:
             genotype.meta = Namespace()
         genotype.meta.parent_fitness = parent_fitness
         genotype.meta.mutation = var_name
+        genotype.meta.generation = parent_generation + 1
+
         if not hasattr(genotype.meta, "momentum"):
             genotype.meta.momentum = Namespace()
         setattr(genotype.meta.momentum, var_name, momentum)
