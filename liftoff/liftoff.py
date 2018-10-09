@@ -63,7 +63,7 @@ class LiftoffState:
 
         if evolves:
             self._components.extend(["selection", "crossover", "random",
-                                     "momentum", "steps"
+                                     "momentum", "steps",
                                      "drop_below_zero",
                                      "runs_no"])
 
