@@ -56,6 +56,7 @@ class LiftoffState:
         self.crossover = .1
         self.random = .005
         self.momentum = 1 - self.crossover - self.random - .1
+        self.refresh_freq = 10
         self.steps = 100
         self.drop_below_zero = True
 
@@ -63,7 +64,7 @@ class LiftoffState:
 
         if evolves:
             self._components.extend(["selection", "crossover", "random",
-                                     "momentum", "steps",
+                                     "momentum", "steps", "refresh_freq",
                                      "drop_below_zero",
                                      "runs_no"])
 
@@ -122,7 +123,7 @@ class LiftoffState:
             elif words[1] != "per_gpu":
                 if words[1] in ["random", "crossover", "momentum"]:
                     func = float
-                elif words[1] in ["runs_no", "procs_no", "steps"]:
+                elif words[1] in ["runs_no", "procs_no", "steps", "refresh_freq"]:
                     func = int
                 elif words[1] in ["drop_below_zero"]:
                     def func(x): return bool(int(x))
@@ -305,6 +306,8 @@ def genetic_search(state: LiftoffState,
             state.momentum = genotype_cfg.meta.momentum
         if hasattr(genotype_cfg.meta, "steps"):
             state.steps = genotype_cfg.meta.steps
+        if hasattr(genotype_cfg.meta, "refresh_freq"):
+            state.refresh_freq = genotype_cfg.meta.refresh_freq
         if hasattr(genotype_cfg.meta, "selection"):
             state.selection = genotype_cfg.meta.selection
         if hasattr(genotype_cfg.meta, "random"):
@@ -421,7 +424,7 @@ def genetic_search(state: LiftoffState,
                 os.remove(manual_path)
         step += 1
 
-        if step % 10 == 0:
+        if step % state.refresh_freq == 0:
             fitnesss, paths = read_fitness(root_path, state.drop_below_zero)
             scores = to_probs[state.selection](np.array(fitnesss))
 
