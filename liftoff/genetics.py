@@ -218,6 +218,7 @@ class Mutator:
                     delattr(parent_mutation, parent_mutation)
             if parent_mutation.__dict__:
                 var_name = np.random.choice(list(parent_momentum.__dict__.keys()))
+                var_name = str(var_name)
                 momentum = getattr(parent_momentum, var_name)
 
         if var_name is None:
