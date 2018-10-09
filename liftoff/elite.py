@@ -219,7 +219,7 @@ def manual_add() -> None:
                 press_again = False
                 return
 
-            title = ord_dict_to_string(genotype)
+            title = ord_dict_to_string(genotype, ignore="meta")
             if len(title) > 200:
                 title = hashlib.md5(title.encode('utf-8')).hexdigest()
 
