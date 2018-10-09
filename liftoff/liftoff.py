@@ -30,6 +30,7 @@ from .utils.sys_interaction import systime_to
 from .version import welcome
 from .genetics import get_mutator
 from .utils.miscellaneous import ord_dict_to_string
+from .interfaces import configure_evolving_experiments
 
 Args = Namespace
 PID = int
@@ -759,9 +760,17 @@ def run_from_system(state: LiftoffState,
     print(clr("All done!", attrs=["bold"]))
 
 
+def use_evolve_gui():
+    import urwid
+
+    fill = urwid.Filler(pile, 'top')
+    loop = urwid.MainLoop(fill, palette, unhandled_input=show_or_exit)
+    loop.run()
+
+
 def evolve():
     welcome()
-    args = parse_args()
+    args = parse_args() if sys.argv[1:] else configure_evolving_experiments()
     print(config_to_string(args))
 
     # Make sure configuration files are ok
