@@ -139,6 +139,7 @@ def manual_add() -> None:
 
     if not lst:
         print("Experiment", clr(exp_name, "yellow"), "has nothing yet.")
+        return
 
     nexperiments = len(lst)
     crt_idx = 0
