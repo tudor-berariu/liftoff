@@ -212,7 +212,7 @@ class Mutator:
         var_name, momentum = None, None
 
         if follow_momentum and parent_fitness is not None:
-            if parent_fitness < grandma_fitness:
+            if grandma_fitness is not None and parent_fitness < grandma_fitness:
                 # Drop momentum if it did no good
                 if hasattr(parent_momentum, parent_mutation):
                     delattr(parent_mutation, parent_mutation)
