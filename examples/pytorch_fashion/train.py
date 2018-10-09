@@ -13,11 +13,12 @@ from liftoff.config import read_config
 
 
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, p_dropout: float = .5):
         super(Net, self).__init__()
+        self.p_dropout = p_dropout
         self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
         self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
+        self.conv2_drop = nn.Dropout2d(p=p_dropout)
         self.fc1 = nn.Linear(320, 50)
         self.fc2 = nn.Linear(50, 10)
 
@@ -26,7 +27,7 @@ class Net(nn.Module):
         x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
         x = x.view(-1, 320)
         x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
+        x = F.dropout(x, p=self.p_dropout, training=self.training)
         x = self.fc2(x)
         return F.log_softmax(x, dim=1)
 
@@ -89,14 +90,11 @@ def run(args: Namespace) -> float:
         ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
-    model = Net().to(device)
+    model = Net(p_dropout=args.dropout).to(device)
     optimizer = optim.SGD(model.parameters(),
                           lr=args.optimizer.lr,
                           momentum=args.optimizer.momentum,
                           nesterov=args.optimizer.nesterov)
-
-    for key, value in args.optimizer.__dict__.items():
-        print(key, value, type(value))
 
     accuracies = []
 

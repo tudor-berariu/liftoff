@@ -1,6 +1,8 @@
 batch_size: 1024
 test_batch_size: 10000
 
+dropout: .5
+
 training:
   epochs: 10
 
@@ -11,8 +13,3 @@ optimizer:
 
 no_cuda: no
 log_interval: 5000
-
-meta:
-  crossover: .1
-  random: .01
-  selection: squared_rank

@@ -3,6 +3,14 @@ batch_size:
   min_power: 2
   max_power: 10
 
+dropout:
+  gtype: number
+  precision: 3
+  positive: yes
+  avoid_zero: yes
+  min_order: -3
+  max_order: -3
+
 optimizer:
   lr:
     gtype: number
@@ -14,10 +22,11 @@ optimizer:
 
   momentum:
     gtype: number
-    precision: 2
+    precision: 3
     positive: yes
-    min_order: -2
-    max_order: -2
+    avoid_zero: yes
+    min_order: -3
+    max_order: -3
 
   nesterov:
     gtype: set
