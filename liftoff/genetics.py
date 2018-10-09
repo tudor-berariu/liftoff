@@ -215,7 +215,7 @@ class Mutator:
             if grandma_fitness is not None and parent_fitness < grandma_fitness:
                 # Drop momentum if it did no good
                 if hasattr(parent_momentum, parent_mutation):
-                    delattr(parent_mutation, parent_mutation)
+                    delattr(parent_momentum, parent_mutation)
             if parent_momentum is not None and parent_momentum.__dict__:
                 var_name = np.random.choice(list(parent_momentum.__dict__.keys()))
                 var_name = str(var_name)
