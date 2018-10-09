@@ -223,6 +223,7 @@ class Mutator:
 
         if var_name is None:
             var_name = np.random.choice(list(self.variables.keys()))
+            var_name = str(var_name)
 
         var_type, kwargs = self.variables[var_name]
         old_value = genotype.__dict__[var_name]
