@@ -216,10 +216,11 @@ class Mutator:
                 # Drop momentum if it did no good
                 if hasattr(parent_momentum, parent_mutation):
                     delattr(parent_mutation, parent_mutation)
-            if parent_mutation is not None and parent_mutation.__dict__:
+            if parent_momentum is not None and parent_momentum.__dict__:
                 var_name = np.random.choice(list(parent_momentum.__dict__.keys()))
                 var_name = str(var_name)
                 momentum = getattr(parent_momentum, var_name)
+                print(f"[Genetics] building on momentum for {var_name:s}")
 
         if var_name is None:
             var_name = np.random.choice(list(self.variables.keys()))
