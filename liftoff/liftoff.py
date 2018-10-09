@@ -1,5 +1,6 @@
 # TODO: This needs major refactoring! Version .3 scheduled for this autumn.
 
+from importlib import import_module
 from argparse import ArgumentParser, Namespace
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 from types import SimpleNamespace
@@ -11,18 +12,17 @@ from functools import partial
 import socket
 import selectors
 import re
-from importlib import import_module
 import multiprocessing
 import multiprocessing.pool
 import time
 import traceback
 import subprocess
+import shutil
 import yaml
 from termcolor import colored as clr
 import numpy as np
 from numpy.random import shuffle
 from tabulate import tabulate
-import shutil
 
 from .config import read_config, namespace_to_dict, config_to_string,\
     value_of, dict_to_namespace, _update_config as update_config
@@ -30,7 +30,6 @@ from .utils.sys_interaction import systime_to
 from .version import welcome
 from .genetics import get_mutator
 from .utils.miscellaneous import ord_dict_to_string
-from .interfaces import configure_evolving_experiments
 
 Args = Namespace
 PID = int
@@ -522,7 +521,6 @@ def get_function(args: Args) -> Callable[[Args], None]:
         function = "run"
     else:
         module_name, function = module_name.split(".")
-
     module = import_module(module_name)
     if function not in module.__dict__:
         raise Exception(f"Module must have function {function}(args).")
@@ -764,17 +762,9 @@ def run_from_system(state: LiftoffState,
     print(clr("All done!", attrs=["bold"]))
 
 
-def use_evolve_gui():
-    import urwid
-
-    fill = urwid.Filler(pile, 'top')
-    loop = urwid.MainLoop(fill, palette, unhandled_input=show_or_exit)
-    loop.run()
-
-
 def evolve():
     welcome()
-    args = parse_args() if sys.argv[1:] else configure_evolving_experiments()
+    args = parse_args()
     print(config_to_string(args))
 
     # Make sure configuration files are ok

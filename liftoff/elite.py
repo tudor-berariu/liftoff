@@ -267,7 +267,7 @@ def manual_add() -> None:
         crt_idx = min(nexperiments - 1, crt_idx + 1)
         refresh()
 
-    def changed_text(edit_widget, text):
+    def changed_text(edit_widget, _text: str) -> None:
         nonlocal press_again
         press_again = True
         if default_values[edit_widget] != edit_widget.edit_text:
