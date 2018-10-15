@@ -381,18 +381,21 @@ def genetic_search(state: LiftoffState,
                 existing = os.listdir(title_path)
 
             for i in range(state.runs_no):
+                print("Trying for run", i, "/", state.runs_no)
                 may_start = False
                 if str(i) not in existing:
                     may_start = True
                 else:
                     crash_path = os.path.join(title_path, str(i), ".__crash")
                     if os.path.isfile(crash_path):
+                        print("restarting")
                         os.remove(crash_path)
                         may_start = True
 
                 if may_start:
                     experiment_path = os.path.join(title_path, str(i))
-                    os.makedirs(experiment_path)
+                    if not os.path.isdir(experiment_path):
+                        os.makedirs(experiment_path)
                     new_cfg = deepcopy(default_cfg)
                     update_config(new_cfg, new_phenotype)
                     new_cfg.run_id = i
@@ -417,7 +420,7 @@ def genetic_search(state: LiftoffState,
                     yield new_cfg
                     found = True
                     break
-            if manual_path:
+            if manual_path and not found:
                 # It means a given genotype was already executed runs_no times
                 with open(os.path.join(to_run_path, "log"), "a") as logfile:
                     logfile.write(f"{manual_path:s} done\n")
@@ -829,12 +832,20 @@ def evolve():
 
     # You need to build the generator
 
-    # -- Copy other files given by the user at the beginning
+    # -- Copy other files given by the user at the beginning ----
 
-    for f in os.listdir(experiment_path):
-        if f.endswith(".yaml") and f not in ["default.yaml", "genotype.yaml"]:
-            shutil.copyfile(os.path.join(experiment_path, f),
-                            os.path.join(root_path, f))
+    to_run_path = os.path.join(root_path, "to_run")
+    if not os.path.isdir(to_run_path):
+        os.makedirs(to_run_path)
+    manual_path = os.path.join(experiment_path, "manual")
+
+    if os.path.isdir(manual_path):
+        for fname in os.listdir(manual_path):
+            if fname.endswith(".yaml"):
+                shutil.copyfile(os.path.join(manual_path, fname),
+                                os.path.join(to_run_path, fname))
+
+    # -- END of copying manually added files
 
     state = LiftoffState(args, evolves=True)
     exp_args = genetic_search(state, root_path, args)
