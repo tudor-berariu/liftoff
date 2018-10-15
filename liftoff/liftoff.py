@@ -341,6 +341,7 @@ def genetic_search(state: LiftoffState,
                             manual_path = os.path.join(to_run_path, fname)
                             new_genotype = read_genotype(manual_path)
                             new_genotype.meta = Namespace(source="manual")
+                            mutator.to_phenotype(new_genotype)  # Just to see it's ok
                             print("Running a manually added file:")
                             break
                         except Exception as exc:
@@ -827,6 +828,13 @@ def evolve():
             comment_file.write(args.comment)
 
     # You need to build the generator
+
+    # -- Copy other files given by the user at the beginning
+
+    for f in os.listdir(experiment_path):
+        if f.endswith(".yaml") and f not in ["default.yaml", "genotype.yaml"]:
+            shutil.copyfile(os.path.join(experiment_path, f),
+                            os.path.join(root_path, f))
 
     state = LiftoffState(args, evolves=True)
     exp_args = genetic_search(state, root_path, args)
