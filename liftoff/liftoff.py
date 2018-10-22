@@ -335,6 +335,7 @@ def genetic_search(state: LiftoffState,
             manual_path = None
             probe = np.random.sample()
             if os.path.isdir(to_run_path) and [f for f in os.listdir(to_run_path) if f.endswith(".yaml")]:
+                all_wrong = True
                 for fname in os.listdir(to_run_path):
                     if fname.endswith(".yaml"):
                         try:
@@ -343,6 +344,7 @@ def genetic_search(state: LiftoffState,
                             new_genotype.meta = Namespace(source="manual")
                             mutator.to_phenotype(new_genotype)  # Just to see it's ok
                             print("Running a manually added file:")
+                            all_wrong = False
                             break
                         except Exception as exc:
                             os.remove(manual_path)
@@ -351,6 +353,8 @@ def genetic_search(state: LiftoffState,
                             with open(os.path.join(to_run_path, "log"), "a") as logfile:
                                 logfile.write(str(exc))
                                 logfile.write(f"\n{fname:s} was deleted\n\n")
+                if all_wrong:
+                    continue
             elif scores.size == 0 or probe < state.random:
                 print("[Main] Generating random experiment.")
                 new_genotype = mutator.sample()

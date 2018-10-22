@@ -88,9 +88,9 @@ def check_number(value: object,
         if digit > limit or digit < -limit:
             raise GenotypeException("Value " + str(digit) + " outside limits")
     if min_order is not None and order < min_order:
-        raise GenotypeException("Order " + order + " less than minimum of " + str(min_order))
+        raise GenotypeException("Order " + str(order) + " less than minimum of " + str(min_order))
     if max_order is not None and order > max_order:
-        raise GenotypeException("Order " + order + " more than maximum of " + str(max_order))
+        raise GenotypeException("Order " + str(order) + " more than maximum of " + str(max_order))
     return True
 
 
