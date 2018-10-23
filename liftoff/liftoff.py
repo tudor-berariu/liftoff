@@ -374,9 +374,8 @@ def genetic_search(state: LiftoffState,
                                               follow_momentum=(probe < threshold))
 
             new_phenotype = mutator.to_phenotype(new_genotype)
-            title = ord_dict_to_string(new_genotype.__dict__, ignore=["meta"])
-            if len(title) > 200:
-                title = hashlib.md5(title.encode('utf-8')).hexdigest()
+            print(new_genotype)
+            title = mutator.hash_genotype(new_genotype.__dict__)
             title_path = os.path.join(root_path, title)
             if not os.path.isdir(title_path):
                 os.makedirs(title_path)

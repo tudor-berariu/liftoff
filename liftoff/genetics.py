@@ -1,9 +1,11 @@
 from typing import Dict, List, Optional, Tuple
 from copy import deepcopy
 from argparse import Namespace
+import hashlib
 import numpy as np
 
 from liftoff.config import namespace_to_dict, config_to_string
+from liftoff.utils.miscellaneous import unambiguous_lstrip
 
 
 class GenotypeException(Exception):
@@ -70,6 +72,21 @@ def random_number(avoid_zero: bool = None,
     return [digit, order]
 
 
+def str_number(value: object,
+               avoid_zero: bool = None,
+               positive: bool = None,
+               min_order: int = None,
+               max_order: int = None,
+               precision: int = None) -> bool:
+    digit, order = value
+    if digit == 0:
+        return "0"
+    elif order < 0:
+        after = -order
+        return f"{digit * (10 ** order):.{after:d}f}"
+    return f"{int(digit * (10 ** order)):d}"
+
+
 def check_number(value: object,
                  avoid_zero: bool = None,
                  positive: bool = None,
@@ -130,6 +147,13 @@ def check_power_of_two(value: object, min_power=None, max_power=None) -> None:
     return True
 
 
+def str_power_of_two(value: object, min_power=None, max_power=None) -> None:
+    crt_power = int(np.log(value) / np.log(2))
+    if crt_power >= 0:
+        return str(int(value))
+    return f"{value:.10f}"
+
+
 # -- Categorical
 
 def mutate_set_member(value: object,
@@ -151,7 +175,11 @@ def random_from_set(domain: List[object]) -> object:
     return domain[np.random.randint(len(domain))]
 
 
+def str_set_member(value, domain):
+    return str(value)
+
 # -- Impose constraints (no cycles, please)
+
 
 def correct_args(args: Namespace,
                  constraints: Dict[str, Dict[object, List[Tuple[str, object]]]]
@@ -189,6 +217,12 @@ class Mutator:
         "number": check_number,
         "ptwo": check_power_of_two,
         "set": check_set_member
+    }
+
+    STR_FS = {
+        "number": str_number,
+        "ptwo": str_power_of_two,
+        "set": str_set_member
     }
 
     def __init__(self, variables: Dict[str, Tuple[str, dict]],
@@ -324,6 +358,21 @@ class Mutator:
             setattr(sub_cfg, elements[-1], value)
         return phenotype
 
+    def hash_genotype(self, genotype: Namespace) -> str:
+        sorted_keys = sorted([key for key in self.variables.keys()])
+        names = unambiguous_lstrip(sorted_keys)
+        lst = []
+        for var_name in sorted_keys:
+            var_type, kwargs = self.variables[var_name]
+            raw_value = genotype[var_name]
+            if raw_value == "delete":
+                str_value = raw_value
+            else:
+                str_value = Mutator.STR_FS[var_type](raw_value, **kwargs)
+            lst.append(f"{names[var_name]:s}__{str_value}")
+
+        return hashlib.md5("__".join(lst).encode('utf-8')).hexdigest()
+
 
 def get_mutator(cfg: Namespace) -> Mutator:
     cfg = namespace_to_dict(cfg)
@@ -380,7 +429,7 @@ def __test():
     for _ in range(25):
         new_args = mutator.crossover(args, prev_args)
         new_args = mutator.mutate(new_args)
-        mutator.check_args(new_args)
+        mutator.check_genotype(new_args)
         prev_args = args
         args = new_args
         print(new_args)
