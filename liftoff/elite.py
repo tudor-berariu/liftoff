@@ -3,15 +3,15 @@ from typing import List, Tuple
 from argparse import ArgumentParser, Namespace
 import os
 import heapq
-import yaml
 import hashlib
+import yaml
 from termcolor import colored as clr
 import tabulate
 import urwid
 
 from liftoff.liftoff import read_genotype
-from liftoff.genetics import GenotypeException, get_mutator
-from liftoff.config import config_to_string, dict_to_namespace
+from liftoff.genetics import get_mutator
+from liftoff.config import dict_to_namespace
 from liftoff.utils.miscellaneous import ord_dict_to_string
 from liftoff.version import version
 
@@ -40,6 +40,9 @@ def parse_args(for_elite: bool = True) -> Namespace:
     arg_parser.add_argument(
         "-p", "--path", dest="show_path", default=False,
         action="store_true", help="Show path to genotype (for copy-paste)")
+    arg_parser.add_argument(
+        "--hz", dest="horizontal", default=False,
+        action="store_true", help="Show on horizontal")
 
     return arg_parser.parse_args()
 
@@ -94,22 +97,37 @@ def elite() -> None:
     exp_path = os.path.join(args.results_dir, exp_name)
     lst = get_top_experiments(exp_path, args)
 
-    for (fitness, path) in lst:
-        ph_path = os.path.join(path, "phenotype.yaml")
+    if args.horizontal:
+        all_values = OrderedDict({})
 
-        print(f"{clr('***', 'red'):s}" +
-              f" Fitness: {clr(f'{fitness:.2f}', 'white', 'on_magenta', attrs=['bold']):s}" +
-              (f" {ph_path:s}" if args.show_path else "") +
-              f" {clr('***', 'red'):s}")
+    for (fitness, path) in lst:
+        if args.horizontal:
+            all_values.setdefault("fitness", []).append(fitness)
+        else:
+            print(f"{clr('***', 'red'):s}" +
+                  f" Fitness: {clr(f'{fitness:.2f}', 'white', 'on_magenta', attrs=['bold']):s}" +
+                  (f" {path:s}" if args.show_path else "") +
+                  f" {clr('***', 'red'):s}")
 
         if args.no_genotype:
             continue
 
-        with open(ph_path) as handler:
-            data = yaml.load(handler, Loader=yaml.SafeLoader)
+        ph_path = os.path.join(path, "phenotype.yaml")
+        cfg_path = os.path.join(path, "cfg.yaml")
+
+        if os.path.isfile(ph_path):
+            with open(ph_path) as handler:
+                data = yaml.load(handler, Loader=yaml.SafeLoader)
             if not args.show_meta:
                 if "meta" in data:
                     del data["meta"]
+        elif os.path.isfile(cfg_path):
+            with open(cfg_path) as handler:
+                all_data = yaml.load(handler, Loader=yaml.SafeLoader)
+            data = all_data["experiment_parameters"]
+            data["run_id"] = all_data["run_id"]
+        else:
+            continue
 
         queue = [("", data)]
         pairs = []
@@ -123,7 +141,15 @@ def elite() -> None:
                 pairs.append((prev, obj))
         pairs.sort(key=lambda x: x[0])
 
-        print(tabulate.tabulate(pairs))
+        if args.horizontal:
+            for (name, value) in pairs:
+                all_values.setdefault(name, []).append(value)
+        else:
+            print(tabulate.tabulate(pairs))
+            print("\n")
+
+    if args.horizontal:
+        print(tabulate.tabulate(all_values))
         print("\n")
 
 
