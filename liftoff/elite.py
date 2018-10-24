@@ -149,7 +149,7 @@ def elite() -> None:
             print("\n")
 
     if args.horizontal:
-        print(tabulate.tabulate(all_values))
+        print(tabulate.tabulate(all_values, headers="keys"))
         print("\n")
 
 
