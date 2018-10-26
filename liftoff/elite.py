@@ -166,7 +166,7 @@ def elite() -> None:
             if args.horizontal:
                 all_values.setdefault("fitness", []).append(fitness)
                 all_values.setdefault("std", []).append(std)
-                all_values.setdefault("count", []).append(count)
+                all_values.setdefault("runs_no", []).append(count)
             else:
                 sfit = clr(f'{fitness:.2f} (std: {std:.2f})', 'white',
                            'on_magenta', attrs=['bold'])
@@ -191,7 +191,8 @@ def elite() -> None:
             with open(cfg_path) as handler:
                 all_data = yaml.load(handler, Loader=yaml.SafeLoader)
             data = all_data["experiment_parameters"]
-            data["run_id"] = all_data["run_id"]
+            if args.no_average:
+                data["run_id"] = all_data["run_id"]
         else:
             continue
 
