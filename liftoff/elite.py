@@ -91,7 +91,7 @@ def top_avg_experiments(exp_path: str, top_n: int = False):
             except ValueError as _exception:
                 run_id = -1
 
-            if run_id > -1:
+            if run_id < 0:
                 subexperiments[rel_path] = (False, [fitness])
             else:
                 runs, scores = subexperiments.setdefault(config_path, ([], []))
