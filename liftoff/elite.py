@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from typing import List, Tuple
 from argparse import ArgumentParser, Namespace
 import os
 import heapq
@@ -7,6 +6,7 @@ import hashlib
 import yaml
 from termcolor import colored as clr
 import tabulate
+import numpy as np
 import urwid
 
 from liftoff.liftoff import read_genotype
@@ -34,15 +34,18 @@ def parse_args(for_elite: bool = True) -> Namespace:
         arg_parser.add_argument(
             "-g", "--no-genotype", dest="no_genotype", default=False,
             action="store_true", help="Do not show genotypes")
+        arg_parser.add_argument(
+            "-i", "--individual", dest="no_average", default=False,
+            action="store_true", help="Do not average over runs.")
+        arg_parser.add_argument(
+            "--hz", dest="horizontal", default=False,
+            action="store_true", help="Show on horizontal")
     arg_parser.add_argument(
         "-m", "--meta", dest="show_meta", default=False,
         action="store_true", help="Show meta information in genotype")
     arg_parser.add_argument(
         "-p", "--path", dest="show_path", default=False,
         action="store_true", help="Show path to genotype (for copy-paste)")
-    arg_parser.add_argument(
-        "--hz", dest="horizontal", default=False,
-        action="store_true", help="Show on horizontal")
 
     return arg_parser.parse_args()
 
@@ -68,9 +71,53 @@ def get_target_experiment(args: Namespace) -> str:
     return exp_name
 
 
-def get_top_experiments(exp_path: str, args: Namespace) -> List[Tuple[float, str]]:
+# -----------------------------------------------------------------------------
+#
+# The two functions below get a path to the results folder of some
+# experiment and return the best 'n' results. One averages over runs,
+# while the second sorts individual runs.
+#
+# (liftoff 3.0)
+
+def top_avg_experiments(exp_path: str, top_n: int = False):
+    subexperiments = dict({})
+    for rel_path, _, files in os.walk(exp_path):
+        if ".__leaf" in files and "fitness" in files:
+            with open(os.path.join(rel_path, "fitness")) as handler:
+                fitness = float(handler.readline().strip())
+            config_path, maybe_run_id = os.path.split(rel_path)
+            try:
+                run_id = int(maybe_run_id)  # This is some hardcore assumption
+            except ValueError as _exception:
+                run_id = -1
+
+            if run_id > -1:
+                subexperiments[rel_path] = (False, [fitness])
+            else:
+                runs, scores = subexperiments.setdefault(config_path, ([], []))
+                runs.append(maybe_run_id)
+                scores.append(fitness)
+
     minheap = []
-    top_n = args.top_n if hasattr(args, "top_n") else None
+    for cfg_path, (runs, scores) in subexperiments.items():
+        mean, std = np.mean(scores), np.std(scores)
+        if runs:
+            cfg_path = os.path.join(cfg_path, runs[0])
+        info = (cfg_path, mean, std, len(scores))
+        if not top_n or top_n > len(minheap):
+            heapq.heappush(minheap, (mean, info))
+        elif mean > minheap[0][0]:
+            heapq.heappushpop(minheap, (mean, info))
+
+    lst = []
+    while minheap:
+        lst.append(heapq.heappop(minheap))
+    lst.reverse()
+    return lst
+
+
+def get_top_experiments(exp_path: str, top_n: int = False):
+    minheap = []
 
     for rel_path, _, files in os.walk(exp_path):
         if ".__leaf" in files and "fitness" in files:
@@ -95,19 +142,38 @@ def elite() -> None:
 
     print("Experiment", clr(exp_name, "yellow", attrs=['bold']), "\n")
     exp_path = os.path.join(args.results_dir, exp_name)
-    lst = get_top_experiments(exp_path, args)
+    if args.individual:
+        lst = get_top_experiments(exp_path, args.top_n)
+    else:
+        lst = top_avg_experiments(exp_path, args.top_n)
 
     if args.horizontal:
         all_values = OrderedDict({})
 
-    for (fitness, path) in lst:
-        if args.horizontal:
-            all_values.setdefault("fitness", []).append(fitness)
+    for (fitness, info) in lst:
+        if isinstance(info, str):
+            path = info
+            if args.horizontal:
+                all_values.setdefault("fitness", []).append(fitness)
+            else:
+                sfit = clr(f'{fitness:.2f}', 'white', 'on_magenta', attrs=['bold'])
+                print(f"{clr('***', 'red'):s}" +
+                      f" Fitness: {sfit:s}" +
+                      (f" {path:s}" if args.show_path else "") +
+                      f" {clr('***', 'red'):s}")
         else:
-            print(f"{clr('***', 'red'):s}" +
-                  f" Fitness: {clr(f'{fitness:.2f}', 'white', 'on_magenta', attrs=['bold']):s}" +
-                  (f" {path:s}" if args.show_path else "") +
-                  f" {clr('***', 'red'):s}")
+            path, _mean, std, count = info
+            if args.horizontal:
+                all_values.setdefault("fitness", []).append(fitness)
+                all_values.setdefault("std", []).append(std)
+                all_values.setdefault("count", []).append(count)
+            else:
+                sfit = clr(f'{fitness:.2f} (std: {std:.2f})', 'white',
+                           'on_magenta', attrs=['bold'])
+                print(f"{clr('***', 'red'):s}" +
+                      f" Fitness: {sfit:s}" +
+                      (f" {path:s}" if args.show_path else "") +
+                      f" {clr('***', 'red'):s}")
 
         if args.no_genotype:
             continue
@@ -161,7 +227,7 @@ def manual_add() -> None:
     genotype_cfg = read_genotype(genotype_cfg_path)
     mutator = get_mutator(genotype_cfg)
 
-    lst = get_top_experiments(exp_path, args)
+    lst = get_top_experiments(exp_path, args.top_n)
 
     if not lst:
         print("Experiment", clr(exp_name, "yellow"), "has nothing yet.")
