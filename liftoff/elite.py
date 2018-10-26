@@ -142,7 +142,7 @@ def elite() -> None:
 
     print("Experiment", clr(exp_name, "yellow", attrs=['bold']), "\n")
     exp_path = os.path.join(args.results_dir, exp_name)
-    if args.individual:
+    if args.no_average:
         lst = get_top_experiments(exp_path, args.top_n)
     else:
         lst = top_avg_experiments(exp_path, args.top_n)
