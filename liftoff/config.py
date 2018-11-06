@@ -197,7 +197,7 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
         if value_of(cfg, 'verbose', 0) > 0:
             import sys
             sys.stdout.write(f"{clr('[Config]', 'red'):s} ")
-            if default_config_file != config_file:
+            if default_config_file and default_config_file != config_file:
                 print(f"Read {config_file:s} over {default_config_file:s}.")
             else:
                 print(f"Read {config_file:s}.")
