@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import zipfile
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 from argparse import ArgumentParser, Namespace
 import yaml
@@ -53,7 +54,8 @@ def collect_results(timestamp: Optional[str] = None,
                     conditions: Union[Namespace, dict] = None,
                     names: List[str] = None,
                     incomplete: bool = True,
-                    results_dir: str = './results') -> List[
+                    results_dir: str = './results',
+                    timestamp_fmt: str = "%Y%b%d-%H%M%S") -> List[
                         Tuple[str, List[str]]]:
     """Returns the list of lists of paths for requested experiment.
 
@@ -102,8 +104,7 @@ def collect_results(timestamp: Optional[str] = None,
                     if os.path.isdir(os.path.join(results_dir, d))]
 
     if experiment_name:
-        regex: str = f"\\d+_{experiment_name:s}$"
-        exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
+        exp_dirs = [f for f in exp_dirs if f.endswith(experiment_name)]
 
     if timestamp:
         exp_dirs = [f for f in exp_dirs if f.startswith(timestamp)]
@@ -113,16 +114,24 @@ def collect_results(timestamp: Optional[str] = None,
 
     dir_name: str
     if len(exp_dirs) > 1:
-        latest: int = 0
+        latest: datetime = datetime.fromtimestamp(0)
         dir_name = None
         for exp_dir in exp_dirs:
-            if not re.match("\\d+_.*", exp_dir):
-                continue
-            exp_time = int(exp_dir.split("_")[0])
-            if exp_time > latest:
-                latest, dir_name = exp_time, exp_dir
+            exp_time = exp_dir.split("_")[0]
+            try:
+                exp_time = datetime.strptime(exp_time, timestamp_fmt)
+                if exp_time > latest:
+                    latest, dir_name = exp_time, exp_dir
+            except:
+                pass
     else:
         dir_name = exp_dirs[0]
+    
+    if exp_dirs and not dir_name:
+        raise ValueError("You might be querying with a different " \
+                         "`timestamp_fmt` than the one you ran the experiments"\
+                         " with. There directories matching the experiment" \
+                         "name but the datetime strings don't match.")
 
     # --- Collect files
 
@@ -136,6 +145,7 @@ def collect_results(timestamp: Optional[str] = None,
         conds = {}
 
     results: List[Tuple[str, List[str]]] = []
+
 
     root_path: str = os.path.join(results_dir, dir_name)
     for rel_path, dirs, files in os.walk(root_path):
@@ -191,8 +201,8 @@ def collect_all_results(timestamp: Optional[str] = None,
                         results_dir: str = './results') -> List[
                             Tuple[str, List[str]]]:
     """
-        Returns the list of lists of paths for all requested experiments
-        in folder 'results/' with name that match //d_*'
+    Returns the list of lists of paths for all requested experiments
+    in folder 'results/' with name that match `anything_chars`'
     """
 
     results = []
@@ -200,7 +210,7 @@ def collect_all_results(timestamp: Optional[str] = None,
     exp_dirs = [d for d in os.listdir(results_dir)
                 if os.path.isdir(os.path.join(results_dir, d))]
 
-    regex: str = f"\\d+_.*"
+    regex: str = f".+?(?=_)\w+"
     exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
 
     for exp_dir in exp_dirs:

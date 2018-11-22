@@ -9,6 +9,7 @@ from importlib import import_module
 import multiprocessing
 import multiprocessing.pool
 import time
+from datetime import datetime
 import traceback
 import subprocess
 import yaml
@@ -95,6 +96,14 @@ def parse_args() -> Args:
         dest="comment",
         default="",
         help="Short comment")
+    # TODO: What if an experiment started with a custom timestamp format is
+    # resumed with the default timestamp_format? :(
+    arg_parser.add_argument(
+        '--timestamp_fmt',
+        type=str,
+        dest="timestamp_fmt",
+        default="%Y%b%d-%H%M%S",
+        help="Default timestamp format.")
     return arg_parser.parse_known_args()[0]
 
 
@@ -241,7 +250,7 @@ def get_max_procs(args: Args) -> int:
 
 def launch(py_file: str,
            exp_args: Args,
-           timestamp: int,
+           timestamp: str,
            ppid: int,
            root_path: str,
            env: Optional[str],
@@ -276,7 +285,7 @@ def launch(py_file: str,
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
-          f" --timestamp {timestamp:d} --ppid {ppid:d}" +\
+          f" --timestamp {timestamp:s} --ppid {ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
           f" && date +%s > {end_path:s}" +\
           f" || date +%s > {crash_path:s}'" +\
@@ -322,7 +331,7 @@ def dump_pids(path, pids):
             file_handler.write(f"{pid:d}\n")
 
 
-def run_from_system(root_path: str, timestamp: int,
+def run_from_system(root_path: str, timestamp: str,
                     cfgs: List[Args], args: Args) -> None:
     active_procs: List[Tuple[PID, Optional[int]]] = []
     max_procs_no = get_max_procs(args)
@@ -400,9 +409,9 @@ def main():
     cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
 
     root_path: str = None
-    timestamp: Optional[int] = None
+    timestamp: Optional[str] = None
     if hasattr(args, "experiment"):
-        timestamp = int(args.timestamp)
+        timestamp = args.timestamp
 
     if args.resume:
         # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
@@ -413,33 +422,36 @@ def main():
                         and f.endswith(experiment)]
             if not previous:
                 raise Exception(
-                    f"No previous experiment with timestamp {timestamp:d}.")
+                    f"No previous experiment with timestamp {timestamp:s}.")
         else:
             previous = [f for f in os.listdir("./results/")
-                        if re.match(f"\\d+_{experiment:s}", f)]
+                        if f.endswith(experiment)]
             if not previous:
                 raise Exception(f"No previous experiment {experiment:s}.")
 
-        last_time = str(max([int(f.split("_")[0]) for f in previous]))
-        print("Resuming", last_time, "!")
+        print("-->", previous)
+        last_time = max([datetime.strptime(f.split("_")[0], args.timestamp_fmt)
+                        for f in previous])
+        last_time = f"{last_time:{args.timestamp_fmt:s}}"
+        print(f"Resuming, {last_time} !")
         root_path = os.path.join("results", f"{last_time:s}_{experiment:s}")
-        timestamp = int(last_time)
+        timestamp = last_time
         if not os.path.isdir(root_path):
             raise Exception(f"{root_path:s} is not a folder.")
         with open(os.path.join(root_path, ".__timestamp"), "r") as t_file:
-            if int(t_file.readline().strip()) != timestamp:
+            if t_file.readline().strip() != timestamp:
                 raise Exception(f"{root_path:s} has the wrong timestamp.")
 
     else:
         # -------------------- STARTING A NEW EXPERIMENT --------------------
-        timestamp = int(time.time())
-        root_path = f"results/{timestamp:d}_{cfg0.experiment:s}/"
+        timestamp = f"{datetime.now():{args.timestamp_fmt:s}}"
+        root_path = f"results/{timestamp:s}_{cfg0.experiment:s}/"
         while os.path.exists(root_path):
-            timestamp = int(time.time())
-            root_path = f"results/{timestamp:d}_{cfg0.experiment:s}/"
+            timestamp = f"{datetime.now():{args.timestamp_fmt:s}}"
+            root_path = f"results/{timestamp:s}_{cfg0.experiment:s}/"
         os.makedirs(root_path)
         with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
-            t_file.write(f"{timestamp:d}\n")
+            t_file.write(f"{timestamp:s}\n")
 
     with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
         ppid_file.write(f"{os.getpid():d}\n")
