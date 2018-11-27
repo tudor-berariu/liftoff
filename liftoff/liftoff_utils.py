@@ -42,6 +42,12 @@ def parse_args() -> Args:
     arg_parser.add_argument(
         "-d", "--results-dir", dest="results_dir", default="results",
         help="Results directory (default: ./results)")
+    arg_parser.add_argument(
+        '--timestamp_fmt',
+        type=str,
+        dest="timestamp_fmt",
+        default="%Y%b%d-%H%M%S",
+        help="Default timestamp format.")
 
     return arg_parser.parse_args()
 
@@ -387,8 +393,10 @@ def abort() -> None:
     params = [args.timestamp, args.experiment, args.results_dir]
     experiments = get_running_liftoffs(*params)
     if len(experiments) > 1 and not args.all:
-        latest_tmstmp = max(e.timestamp for e in experiments)
-        to_kill = [latest_tmstmp]
+        tmstmps = [datetime.datetime.strptime(e.timestamp, args.timestamp_fmt)
+                   for e in experiments]
+        latest_tmstmp = max(tmstmps)
+        to_kill = [f"{latest_tmstmp:{args.timestamp_fmt:s}}"]
     else:
         to_kill = [e.timestamp for e in experiments]
 

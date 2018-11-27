@@ -105,7 +105,7 @@ def parse_args(strict: bool = True) -> Namespace:
         dest="out_dir"
     )
     arg_parser.add_argument("--ppid", type=int, dest="__ppid")
-    arg_parser.add_argument("--timestamp", type=int, dest="__timestamp")
+    arg_parser.add_argument("--timestamp", type=str, dest="__timestamp")
 
     if strict:
         return arg_parser.parse_args()
