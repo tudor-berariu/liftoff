@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='liftoff',
-      version='0.02',
+      version='0.021',
       description='Experiment launcher; AGI assistant',
       entry_points={
           'console_scripts': [

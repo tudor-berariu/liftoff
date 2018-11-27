@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 import os
 import os.path
-import datetime
+from datetime import datetime
 
 
 def add_experiment_lookup_args(arg_parser: ArgumentParser):
@@ -38,28 +38,26 @@ def get_latest_experiment(experiment: str = None,
         raise ValueError("Unsupported datetime format. No '_'s, please.")
 
     latest_experiment = None  # type: str
-    latest_timestamp = None  # type: datetime.datetime
+    latest_timestamp = None  # type: datetime
 
-    for dirname in os.listdir(results_dir):
-        if os.path.isdir(os.path.join(results_dir, dirname)):
-            if timestamp is not None and not dirname.startswith(timestamp):
-                continue
+    for dirname in filter(lambda f: f.is_dir(), os.scandir(results_dir)):
+        if timestamp is not None and not dirname.name.startswith(timestamp):
+            continue
 
-            crt_timestamp_str, *crt_name_parts = dirname.split("_")
-            crt_name = "_".join(crt_name_parts)
+        crt_timestamp_str, *crt_name_parts = dirname.name.split("_")
+        crt_name = "_".join(crt_name_parts)
 
-            if experiment is not None and crt_name != experiment:
-                continue
+        if experiment is not None and crt_name != experiment:
+            continue
 
-            try:
-                crt_timestamp = datetime.datetime.strptime(crt_timestamp_str,
-                                                           timestamp_fmt)
-            except ValueError:
-                continue
+        try:
+            crt_timestamp = datetime.strptime(crt_timestamp_str, timestamp_fmt)
+        except ValueError:
+            continue
 
-            if latest_experiment is None or latest_timestamp < crt_timestamp:
-                latest_experiment = dirname
-                latest_timestamp = crt_timestamp
+        if latest_experiment is None or latest_timestamp < crt_timestamp:
+            latest_experiment = dirname.name
+            latest_timestamp = crt_timestamp
 
     if latest_experiment is None:
         raise RuntimeError("No experiments found.")
