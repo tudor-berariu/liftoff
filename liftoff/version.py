@@ -1,26 +1,15 @@
-import subprocess
-import os.path
+import git
 from termcolor import colored as clr
 
 
-def get_commit():
-    dir_path = os.path.dirname(__file__)
-    cmd = f"cd {dir_path:s}; " +\
-        "echo $(git rev-parse --abbrev-ref HEAD)-" +\
-        "$(git describe --always)"
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, shell=True)
-    (out, err) = proc.communicate()
-    err = err.decode("Utf-8").strip()
-    if err:
-        print("Error while inspecting current repo:", err)
-        return ""
-    return ":" + out.decode("Utf-8").strip()
+def get_active_banch_commit():
+    repo = git.Repo(search_parent_directories=True)
+    return ":" + repo.active_branch.name + ":" + repo.head.object.hexsha[-7:]
 
 
 def version() -> str:
-    commit = get_commit()
-    return "0.2.2" + commit  # TODO: change this when a ne version is released
+    commit = get_active_banch_commit()
+    return "0.2.1" + commit  # TODO: change this when a ne version is released
 
 
 def welcome_msg() -> str:

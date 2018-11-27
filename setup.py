@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='liftoff',
-      version='0.021',
+      version='0.21',
       description='Experiment launcher; AGI assistant',
       entry_points={
           'console_scripts': [
@@ -19,6 +19,7 @@ setup(name='liftoff',
       license='MIT',
       packages=['liftoff'],
       install_requires=[
+          'gitpython',
           'pyyaml',
           'tabulate',
           'termcolor',
