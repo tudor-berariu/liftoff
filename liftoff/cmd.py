@@ -22,3 +22,8 @@ def abort():
 def commit():
     from liftoff.liftoff_results import commit as _commit
     _commit()
+
+
+def errors():
+    from liftoff.errors import main as _errors
+    _errors()

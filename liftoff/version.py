@@ -13,7 +13,7 @@ def get_commit():
     (out, err) = proc.communicate()
     err = err.decode("Utf-8").strip()
     if err:
-        print(err)
+        print("Error while inspecting current repo:", err)
         return ""
     return ":" + out.decode("Utf-8").strip()
 
