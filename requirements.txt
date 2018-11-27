@@ -1,3 +1,5 @@
+gitpython
 pyyaml
 termcolor
 tabulate
+urwid
