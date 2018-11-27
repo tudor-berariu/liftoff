@@ -27,3 +27,8 @@ def commit():
 def errors():
     from liftoff.errors import main as _errors
     _errors()
+
+
+def elite():
+    from liftoff.elite import elite as _elite
+    _elite()
