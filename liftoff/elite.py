@@ -1,4 +1,5 @@
-from typing import List
+from collections import OrderedDict
+from typing import List, Tuple
 import os
 from argparse import Namespace, ArgumentParser
 from itertools import chain
@@ -13,10 +14,7 @@ from liftoff.common import add_experiment_lookup_args
 from liftoff.version import welcome
 
 
-# TODO: vertical mode
 # TODO: add std.
-# TODO: add max / min (not only avg)
-# TODO: add sorting order
 
 
 def add_reporting_args(arg_parser: ArgumentParser) -> None:
@@ -118,28 +116,66 @@ def collect_runs(exp_path: str, individual: bool = False,
                     del details["run_id"]
 
                 all_runs.setdefault(key, []).append((summary, details))
-
-    if not individual:
-        new_runs = {}
-        for run_path, runs in all_runs.items():
-            avgs = {}
-            for (summary, details) in runs:
-                for key, value in summary.items():
-                    avgs.setdefault(key, []).append(value)
-            avgs = {key: np.mean(vals) for (key, vals) in avgs.items()}
-            new_runs[run_path] = avgs, runs[0][1]
-        all_runs = new_runs
-
     return all_runs
 
 
-def get_top(all_runs: dict, top_n: int, sort_fields: List[str]):
+def aggregate(all_runs, sort_criteria: OrderedDict):
+    new_runs = {}
+    for run_path, runs in all_runs.items():
+        values = {}
+        for (summary, _) in runs:
+            for key, value in summary.items():
+                values.setdefault(key, []).append(value)
+        aggrs = {}
+        for key, vals in values.items():
+            agg_op, _order = sort_criteria.get(key, ("avg", _))
+            if agg_op == "avg":
+                aggrs[key] = np.mean(vals), np.std(vals)
+            elif agg_op == "max":
+                aggrs[key] = np.max(vals), None
+            elif agg_op == "min":
+                aggrs[key] = np.min(vals), None
+            else:
+                raise RuntimeError
+
+        new_runs[run_path] = aggrs, runs[0][1]  # (summary, details)
+    return new_runs
+
+
+def get_top(all_runs: dict, top_n: int, sort_criteria: OrderedDict):
     def sort_key(run):
-        return tuple(run[1][0][k] for k in sort_fields)
-    srt = sorted(all_runs.items(), key=sort_key, reverse=True)
+        key = []
+        for name, (_, order) in sort_criteria.items():
+            val = run[1][0][name]
+            val = val[0] if isinstance(val, tuple) else val
+            key.append(val * (-1 if order == "desc" else 1))
+        return tuple(key)
+    srt = sorted(all_runs.items(), key=sort_key)
     if top_n > 0:
         srt = srt[:top_n]
     return srt
+
+
+def process_sort_fields(sort_fields: List[str],
+                        default_op: str = "avg",
+                        default_order: str = "desc"
+                        ) -> List[Tuple[str, str, str]]:
+    ops = ["max", "avg", "min"]
+    orders = ["asc", "desc"]
+
+    sort_order = OrderedDict({})
+    for field in sort_fields:
+        name, *details = field.split(":")
+        agg_op, order = None, None
+        for detail in details:
+            if detail in ops:
+                agg_op = detail
+            elif detail in orders:
+                order = detail
+        agg_op = default_op if agg_op is None else agg_op
+        order = default_order if order is None else order
+        sort_order[name] = agg_op, order
+    return sort_order
 
 
 def elite() -> None:
@@ -151,31 +187,56 @@ def elite() -> None:
 
     all_runs = collect_runs(exp_path, args.individual,
                             just_title=args.just_title)
-    runs = get_top(all_runs, args.top_n, args.sort_fields)
+    sort_criteria = process_sort_fields(args.sort_fields)
+    if not args.individual:
+        all_runs = aggregate(all_runs, sort_criteria)
+    runs = get_top(all_runs, args.top_n, sort_criteria)
 
     if not args.vertical:
         summary_keys = list(set(chain(*(r[1][0].keys() for r in runs))))
         details_keys = list(set(chain(*(r[1][1].keys() for r in runs))))
-        summary_keys = [k for k in summary_keys if k not in args.sort_fields]
+        summary_keys = [k for k in summary_keys if k not in sort_criteria]
 
         table = []
         for _, (summary, details) in runs:
             vals = []
             for key in details_keys:
                 vals.append(details.get(key, None))
-            if args.sort_fields:
-                for key in args.sort_fields:
-                    vals.append(summary.get(key, None))
+            for key in sort_criteria.keys():
+                val = summary.get(key, None)
+                if isinstance(val, tuple):
+                    vals.extend(val)
+                else:
+                    vals.append(val)
             for key in summary_keys:
-                vals.append(summary.get(key, None))
+                val = summary.get(key, None)
+                if isinstance(val, tuple):
+                    vals.extend(val)
+                else:
+                    vals.append(val)
             table.append(tuple(vals))
         header = []
         header.extend(details_keys)
-        if args.sort_fields:
-            header.extend(args.sort_fields)
-        header.extend(summary_keys)
-
+        if args.individual:
+            header.extend(list(sort_criteria.keys()))
+            header.extend(summary_keys)
+        else:
+            for name in sort_criteria.keys():
+                header.extend([name, ""])
+            for name in summary_keys:
+                header.extend([name, ""])
         print(tabulate(table, headers=header))
 
     else:
-        raise NotImplementedError
+        for path, (summary, details) in runs:
+            info = [["Path", path,]]
+            info.extend(list(it) for it in details.items())
+            for key, val in summary.items():
+                if key in sort_criteria:
+                    key = clr(key, "yellow")
+                if isinstance(val, tuple):
+                    mean, std = val
+                    info.append([key, mean, std])
+                else:
+                    info.append([key, val])
+            print(tabulate(info))
