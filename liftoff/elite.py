@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 import os
 from argparse import Namespace, ArgumentParser
 from itertools import chain
@@ -12,9 +12,6 @@ from termcolor import colored as clr
 from liftoff.common import get_latest_experiment
 from liftoff.common import add_experiment_lookup_args
 from liftoff.version import welcome
-
-
-# TODO: add std.
 
 
 def add_reporting_args(arg_parser: ArgumentParser) -> None:
@@ -68,7 +65,7 @@ def get_run_summary(run_path: str) -> dict:
 
     fitness_path = os.path.join(run_path, "fitness")
     if os.path.isfile(fitness_path):
-        with open(fitness_path) as handler:
+        with open(fitness_path, "r") as handler:
             fitness = float(handler.readline().strip())
         return {"fitness": fitness}
 
@@ -94,7 +91,7 @@ def get_run_parameters(run_path: str, just_title: bool = False) -> dict:
 
 def collect_runs(exp_path: str, individual: bool = False,
                  just_title: bool = False):
-    all_runs = dict({})
+    all_runs = dict({})  # type: Dict[str, Any]
     for run_path, _, files in os.walk(exp_path):
         if ".__leaf" in files:
             summary = get_run_summary(run_path)
@@ -122,13 +119,13 @@ def collect_runs(exp_path: str, individual: bool = False,
 def aggregate(all_runs, sort_criteria: OrderedDict):
     new_runs = {}
     for run_path, runs in all_runs.items():
-        values = {}
+        values = {}  # type: Dict[str, List[float]]
         for (summary, _) in runs:
             for key, value in summary.items():
                 values.setdefault(key, []).append(value)
         aggrs = {}
         for key, vals in values.items():
-            agg_op, _order = sort_criteria.get(key, ("avg", _))
+            agg_op, _order = sort_criteria.get(key, ("avg", None))
             if agg_op == "avg":
                 aggrs[key] = np.mean(vals), np.std(vals)
             elif agg_op == "max":
@@ -159,11 +156,11 @@ def get_top(all_runs: dict, top_n: int, sort_criteria: OrderedDict):
 def process_sort_fields(sort_fields: List[str],
                         default_op: str = "avg",
                         default_order: str = "desc"
-                        ) -> List[Tuple[str, str, str]]:
+                        ) -> OrderedDict:
     ops = ["max", "avg", "min"]
     orders = ["asc", "desc"]
 
-    sort_order = OrderedDict({})
+    sort_order = OrderedDict({})  # type: OrderedDict[str, Tuple[str, str]]
     for field in sort_fields:
         name, *details = field.split(":")
         agg_op, order = None, None
@@ -229,7 +226,7 @@ def elite() -> None:
 
     else:
         for path, (summary, details) in runs:
-            info = [["Path", path,]]
+            info = [["Path", path]]
             info.extend(list(it) for it in details.items())
             for key, val in summary.items():
                 if key in sort_criteria:
