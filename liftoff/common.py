@@ -32,7 +32,8 @@ def add_experiment_lookup_args(arg_parser: ArgumentParser):
 def get_latest_experiment(experiment: str = None,
                           timestamp: str = None,
                           timestamp_fmt: str = "%Y%b%d-%H%M%S",
-                          results_dir: str = "./results") -> str:
+                          results_dir: str = "./results",
+                          **_kwargs) -> str:
 
     if "_" in timestamp_fmt:
         raise ValueError("Unsupported datetime format. No '_'s, please.")
