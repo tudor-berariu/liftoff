@@ -79,14 +79,14 @@ def update_configs(original, diff):
             update_configs(original[key], value)
 
 
-def get_liftoff_config() -> dict:
+def get_liftoff_config(only_local: bool = False) -> dict:
     local_cfg, global_cfg = None, None
 
     if os.path.isfile(".liftoff_cfg.yaml"):
         with open(".liftoff_cfg.yaml") as handler:
             local_cfg = yaml.load(handler, Loader=yaml.SafeLoader)
-    if os.path.isfile("~/.liftoff_cfg.yaml"):
-        with open(".liftoff_cfg.yaml") as handler:
+    if not only_local and os.path.isfile("~/.liftoff_cfg.yaml"):
+        with open("~/.liftoff_cfg.yaml") as handler:
             global_cfg = yaml.load(handler, Loader=yaml.SafeLoader)
 
     if global_cfg is None:
@@ -97,3 +97,22 @@ def get_liftoff_config() -> dict:
 
     update_configs(global_cfg, local_cfg)
     return global_cfg
+
+
+def ask_user_yn(question: str) -> bool:
+    while True:
+        answer = str(input(f"\n{question:s} (y/n): ")).lower().strip()
+        if answer == "y":
+            return True
+        if answer == "n":
+            return False
+
+
+def save_local_options(update_cfg: dict):
+    local_cfg = get_liftoff_config(only_local=True)
+    if local_cfg is None:
+        local_cfg = update_cfg
+    else:
+        update_configs(local_cfg, update_cfg)
+    with open(".liftoff_cfg.yaml", "w") as handler:
+        yaml.safe_dump(local_cfg, handler, default_flow_style=False)
