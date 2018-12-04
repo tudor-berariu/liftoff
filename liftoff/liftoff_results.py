@@ -7,6 +7,8 @@ from typing import Dict, List, Optional, Tuple, Union
 from argparse import ArgumentParser, Namespace
 import yaml
 from termcolor import colored as clr
+from liftoff.common import add_experiment_lookup_args
+from liftoff.common import get_latest_experiment
 from .config import namespace_to_dict
 
 
@@ -23,16 +25,7 @@ TO_IGNORE = [".__leaf",
 
 def parse_commit_args() -> Args:
     arg_parser = ArgumentParser()
-    arg_parser.add_argument(
-        "-e", "--experiment", type=str, dest="experiment",
-        help="Get by name.")
-    arg_parser.add_argument(
-        "-t", "--timestamp", type=str, dest="timestamp",
-        help="Get by timestamp.")
-    arg_parser.add_argument(
-        "-d", "--results-dir", dest="results_dir", default="results",
-        help="Results directory (default: ./results)")
-
+    add_experiment_lookup_args(arg_parser)
     return arg_parser.parse_args()
 
 
@@ -126,11 +119,11 @@ def collect_results(timestamp: Optional[str] = None,
                 pass
     else:
         dir_name = exp_dirs[0]
-    
+
     if exp_dirs and not dir_name:
-        raise ValueError("You might be querying with a different " \
-                         "`timestamp_fmt` than the one you ran the experiments"\
-                         " with. There directories matching the experiment" \
+        raise ValueError("You might be querying with a different "
+                         "`timestamp_fmt` than the one you ran the experiments"
+                         " with. There directories matching the experiment"
                          "name but the datetime strings don't match.")
 
     # --- Collect files
@@ -145,7 +138,6 @@ def collect_results(timestamp: Optional[str] = None,
         conds = {}
 
     results: List[Tuple[str, List[str]]] = []
-
 
     root_path: str = os.path.join(results_dir, dir_name)
     for rel_path, dirs, files in os.walk(root_path):
@@ -215,14 +207,16 @@ def collect_all_results(timestamp: Optional[str] = None,
 
     for exp_dir in exp_dirs:
         r = collect_results(timestamp, experiment_name, exp_dir,
-            conditions, names, incomplete)
-        if len(r) > 0:
+                            conditions, names, incomplete)
+        if r:
             results.append(r)
 
     return results
 
 
 ZipFile = zipfile.ZipFile
+
+
 def dir_to_zip(zip_handle: ZipFile, path: str, base_path: str = ""):
     """
     Adding directory given by `path` to opened zip file `zip_handle`
@@ -299,23 +293,7 @@ def commit() -> None:
     """ Takes the last experiment it finds and archives it.
     """
     args = parse_commit_args()
-
-    assert os.path.isdir(args.results_dir), clr(
-        f"Wrong path to the results folder. Check the `results_dir` argument.",
-        'red', attrs=['bold'])
-
-    # get dir names in the results dir
-    exp_names = [name for name in os.listdir(args.results_dir)
-                 if os.path.isdir(f'{args.results_dir}/{name}')]
-    assert exp_names, clr(
-        f'You have no experiments in your {args.results_dir} folder.',
-        'red', attrs=['bold'])
-
-    # zip the last experiment
-    last_exp_name = sorted(exp_names)[-1]
-    zipf = zipfile.ZipFile(f'{args.results_dir}/{last_exp_name}.zip', 'w',
-                           zipfile.ZIP_DEFLATED)
-    dir_to_zip(zipf,
-               path=f'{args.results_dir}/{last_exp_name}',
-               base_path=f'{args.results_dir}/{last_exp_name}')
+    _exp_name, exp_path = get_latest_experiment(**args.__dict__)
+    zipf = zipfile.ZipFile(f'{exp_path:s}.zip', 'w', zipfile.ZIP_DEFLATED)
+    dir_to_zip(zipf, path=exp_path, base_path=exp_path)
     zipf.close()
