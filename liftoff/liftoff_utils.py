@@ -8,6 +8,10 @@ from collections import OrderedDict
 from termcolor import colored as clr
 import tabulate
 
+from liftoff.common import add_experiment_lookup_args
+from liftoff.common import get_liftoff_config
+
+
 Args = Namespace
 PID = int
 
@@ -24,30 +28,18 @@ class Experiment(NamedTuple):
 
 def parse_args() -> Args:
     arg_parser = ArgumentParser()
+
+    add_experiment_lookup_args(arg_parser)
+
     arg_parser.add_argument(
         "-a", "--all", action="store_true", dest="all",
         help="Apply to all running experiments.")
-    arg_parser.add_argument(
-        "-e", "--experiment", type=str, dest="experiment",
-        help="Get by name.")
-    arg_parser.add_argument(
-        "-t", "--timestamp", type=str, dest="timestamp",
-        help="Get by timestamp.")
     arg_parser.add_argument(
         "-r", "--resumed", action="store_true", dest="short",
         help="Display short table.")
     arg_parser.add_argument(
         "-s", "--sort", dest="sort", default=None,
         help="Sort by column.")
-    arg_parser.add_argument(
-        "-d", "--results-dir", dest="results_dir", default="results",
-        help="Results directory (default: ./results)")
-    arg_parser.add_argument(
-        '--timestamp_fmt',
-        type=str,
-        dest="timestamp_fmt",
-        default="%Y%b%d-%H%M%S",
-        help="Default timestamp format.")
 
     return arg_parser.parse_args()
 
@@ -160,7 +152,7 @@ def get_all_from_results(timestamp: Optional[str],
             continue
         if tmstmp in running_timestamps:
             continue
-        experiments.append(Experiment(-1, exp, tmstmp, path, mode, [], False))
+        experiments.append(Experiment(None, exp, tmstmp, path, mode, [], False))
 
     return experiments
 
@@ -168,7 +160,7 @@ def get_all_from_results(timestamp: Optional[str],
 def display_progress(experiments: List[Experiment], args: Args = None):
     headers = ["PID", "Timestamp", "Experiment",
                "Running", "Done", "Crashed", "Lost", "Total", "Success",
-               "Px", "Avg.time", "T", "Time left",
+               "Px", "Avg.time", "T", "Time left", "Wall time",
                "Obs"]
     exp_info = {info: [] for info in headers}
 
@@ -241,7 +233,7 @@ def display_progress(experiments: List[Experiment], args: Args = None):
         else:
             factor = None
         exp_info["Px"].append(factor)
-
+        exp_info["Wall time"].append(str(datetime.timedelta(seconds=wall_time)))
         if done + crashed > 0:
             avg_time = float(total_time) / done
             exp_info["Avg.time"].append(avg_time)
@@ -307,12 +299,18 @@ def display_progress(experiments: List[Experiment], args: Args = None):
     if not any(x for x in exp_info["Obs"]):
         del exp_info["Obs"]
 
+    headers = ["PID", "Timestamp", "Experiment", fkey]
+    extra = ["Time left", "Wall time", "Px", "Avg.time", "T"]
+
+    config = get_liftoff_config()
     if args and args.short:
-        headers = ["Timestamp", "Experiment", fkey]
+        pass
+    elif config and "status" in config and "headers" in config["status"]:
+        if not all(h in extra for h in config["status"]["headers"]):
+            raise RuntimeError("Strage header in status/headers")
+        headers.extend(config["status"]["headers"])
     else:
-        headers = ["PID", "Timestamp", "Experiment",
-                   fkey, "Time left",
-                   "Px", "Avg.time", "T"]
+        headers.extend(extra)
 
     if "Obs" in exp_info:
         headers.append("Obs")
