@@ -4,7 +4,6 @@ from copy import deepcopy
 import sys
 import os
 from functools import partial
-import re
 from importlib import import_module
 import multiprocessing
 import multiprocessing.pool
@@ -16,6 +15,7 @@ import yaml
 from termcolor import colored as clr
 from numpy.random import shuffle
 
+from .common import get_liftoff_config, ask_user_yn, save_local_options
 from .config import read_config, namespace_to_dict, config_to_string, value_of
 from .utils.sys_interaction import systime_to
 
@@ -25,11 +25,11 @@ PID = int
 
 def parse_args() -> Args:
     """If you need GPU magic, please use detached processes."""
-
+    # TODO: clean all the fucked up arguments below
     arg_parser = ArgumentParser()
     arg_parser.add_argument(
         "module",
-        default="learn.py",
+        nargs="?",
         help="Module where to call `run(args)` from.")
     arg_parser.add_argument(
         '--runs-no',
@@ -196,7 +196,7 @@ def get_function(args: Args) -> Callable[[Args], None]:
         module_name = module_name[:-3]
         function = "run"
     else:
-    	module_name, function = module_name.split(".")
+        module_name, function = module_name.split(".")
 
     module = import_module(module_name)
     if function not in module.__dict__:
@@ -398,8 +398,34 @@ def run_from_system(root_path: str, timestamp: str,
     print(clr("All done!", attrs=["bold"]))
 
 
+def complete_args_from_liftoff_config(args: Namespace) -> None:
+    lft_cfg = get_liftoff_config()
+    no_questions = lft_cfg is not None and lft_cfg.get("no_questions", False)
+
+    if args.module is None:
+        if lft_cfg is not None and "module" in lft_cfg:
+            args.module = lft_cfg["module"]
+        else:
+            raise RuntimeError("You did not provide a script to be run.")
+    elif not no_questions and (lft_cfg is None or "module" not in lft_cfg):
+        flag_name = "asked_about_module"
+        asked = False
+        if lft_cfg is not None:
+            asked = lft_cfg.get("history", {}).get(flag_name, False)
+        if not asked:
+            question = f"Do you want to save {args.module:s} as the " + \
+                "default script for this project?"
+            new_options = {"history": {flag_name: True}}
+            if ask_user_yn(question):
+                new_options["module"] = args.module
+            save_local_options(new_options)
+
+
 def main():
     args = parse_args()
+
+    complete_args_from_liftoff_config(args)
+
     print(config_to_string(args))
 
     # Read configuration files
@@ -431,7 +457,7 @@ def main():
 
         print("-->", previous)
         last_time = max([datetime.strptime(f.split("_")[0], args.timestamp_fmt)
-                        for f in previous])
+                         for f in previous])
         last_time = f"{last_time:{args.timestamp_fmt:s}}"
         print(f"Resuming, {last_time} !")
         root_path = os.path.join("results", f"{last_time:s}_{experiment:s}")
