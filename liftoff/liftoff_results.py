@@ -84,48 +84,16 @@ def collect_results(timestamp: Optional[str] = None,
 
     """
 
-    # --- Find the requested experiment folder
+    if experiment_full_name is not None:
+        sep_idx = experiment_full_name.index("_")
+        timestamp = experiment_full_name[:sep_idx]
+        experiment_name = experiment_full_name[sep_idx + 1:]
 
-    assert os.path.isdir(results_dir), clr(
-        f"Wrong path to the results folder. Check the `results_dir` argument.",
-        'red', attrs=['bold'])
-
-    if experiment_full_name:
-        exp_dirs = [experiment_full_name]
-    else:
-        exp_dirs = [d for d in os.listdir(results_dir)
-                    if os.path.isdir(os.path.join(results_dir, d))]
-
-    if experiment_name:
-        exp_dirs = [f for f in exp_dirs if f.endswith(experiment_name)]
-
-    if timestamp:
-        exp_dirs = [f for f in exp_dirs if f.startswith(timestamp)]
-
-    if not exp_dirs:
-        raise FileNotFoundError
-
-    dir_name: str
-    if len(exp_dirs) > 1:
-        latest: datetime = datetime.fromtimestamp(0)
-        dir_name = None
-        for exp_dir in exp_dirs:
-            exp_time = exp_dir.split("_")[0]
-            try:
-                exp_time = datetime.strptime(exp_time, timestamp_fmt)
-                if exp_time > latest:
-                    latest, dir_name = exp_time, exp_dir
-            except:
-                pass
-    else:
-        dir_name = exp_dirs[0]
-
-    if exp_dirs and not dir_name:
-        raise ValueError("You might be querying with a different "
-                         "`timestamp_fmt` than the one you ran the experiments"
-                         " with. There directories matching the experiment"
-                         "name but the datetime strings don't match.")
-
+    _exp_name, exp_path = get_latest_experiment(experiment=experiment_name,
+                                                timestamp=timestamp,
+                                                timestamp_fmt=timestamp_fmt,
+                                                results_dir=results_dir
+                                                )
     # --- Collect files
 
     conds: dict
@@ -139,8 +107,7 @@ def collect_results(timestamp: Optional[str] = None,
 
     results: List[Tuple[str, List[str]]] = []
 
-    root_path: str = os.path.join(results_dir, dir_name)
-    for rel_path, dirs, files in os.walk(root_path):
+    for rel_path, dirs, files in os.walk(exp_path):
         if ".__leaf" not in files:
             continue
         if dirs:
