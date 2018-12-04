@@ -2,13 +2,11 @@ import os
 import re
 import sys
 import zipfile
-from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Union
 from argparse import ArgumentParser, Namespace
 import yaml
-from termcolor import colored as clr
-from liftoff.common import add_experiment_lookup_args
-from liftoff.common import get_latest_experiment
+
+from .common import add_experiment_lookup_args, get_latest_experiment
 from .config import namespace_to_dict
 
 

@@ -8,8 +8,7 @@ from collections import OrderedDict
 from termcolor import colored as clr
 import tabulate
 
-from liftoff.common import add_experiment_lookup_args
-from liftoff.common import get_liftoff_config
+from .common import add_experiment_lookup_args, get_liftoff_config
 
 
 Args = Namespace
