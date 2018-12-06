@@ -7,7 +7,8 @@ import urwid
 
 from .version import version
 from .config import config_to_string, dict_to_namespace
-from .common import get_latest_experiment, add_experiment_lookup_args
+from .common.argparsers import add_experiment_lookup_args
+from .common.lookup import get_latest_experiment
 
 
 def parse_args() -> Namespace:

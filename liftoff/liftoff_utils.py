@@ -8,7 +8,8 @@ from collections import OrderedDict
 from termcolor import colored as clr
 import tabulate
 
-from .common import add_experiment_lookup_args, get_liftoff_config
+from .common.liftoff_config import get_liftoff_config
+from .common.argparsers import add_experiment_lookup_args
 
 
 Args = Namespace
@@ -53,7 +54,8 @@ def get_running_liftoffs(timestamp: Optional[str],
         return []
 
     cmd = "COLUMNS=0 pgrep liftoff" \
-        f" | xargs -r -n 1 grep --files-with-matches {results_dir:s}/*/.__ppid -e" \
+        " | xargs -r -n 1 grep " \
+        f"--files-with-matches {results_dir:s}/*/.__ppid -e" \
         " | xargs -n 1 -r dirname" \
         " | xargs -n 1 -r -I_DIR -- " \
         "sh -c 'echo _DIR" \
@@ -92,7 +94,7 @@ def get_running_liftoffs(timestamp: Optional[str],
                     for l in result.stdout.decode("utf-8").split("\n") if l]
         elif mode == "nohup":
             cmd = f"for p in "\
-                  f"`pgrep -f '\\-\\-timestamp {tmstmp:s} \\-\\-ppid {ppid:s}'`"\
+                  f"`pgrep -f '\\-\\-id {tmstmp:s}_{ppid:s}'`"\
                   f"; do COLUMNS=0 ps -p $p -o pid,ppid h; done"
 
             result = subprocess.run(cmd,
@@ -207,8 +209,8 @@ def display_progress(experiments: List[Experiment], args: Args = None):
                         total_time += end_time - start_time
                     elif ".__crash" in files:
                         crashed += 1
-                        with open(os.path.join(run_path, ".__crash")) as e_file:
-                            end_time = int(e_file.readline().strip())
+                        with open(os.path.join(run_path, ".__crash")) as c_file:
+                            end_time = int(c_file.readline().strip())
                         if max_time is None or max_time < end_time:
                             max_time = end_time
                         total_time += end_time - start_time
@@ -337,7 +339,7 @@ def display_progress(experiments: List[Experiment], args: Args = None):
           f"{clr('L', 'blue'):s} = {clr('Lost', 'blue'):s}; "
           f"{clr('S', 'green', attrs=['bold']):s} = "
           f"{clr('Success', 'green', attrs=['bold']):s}")
-    print("If there are lost experiments, 'Px', and 'Time left' might be wrong.")
+    print("If there are lost experiments 'Px', and 'Time left' might be wrong.")
 
 
 def ask_user(experiments: List[Experiment], to_kill: List[PID]):

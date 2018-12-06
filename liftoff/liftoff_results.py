@@ -6,7 +6,8 @@ from typing import Dict, List, Optional, Tuple, Union
 from argparse import ArgumentParser, Namespace
 import yaml
 
-from .common import add_experiment_lookup_args, get_latest_experiment
+from .common.argparsers import add_experiment_lookup_args
+from .common.lookup import get_latest_experiment
 from .config import namespace_to_dict
 
 

@@ -5,6 +5,8 @@ from typing import Any, List, Union
 import yaml
 from termcolor import colored as clr
 
+from .common.argparsers import add_experiment_args
+
 
 def namespace_to_dict(namespace: Namespace) -> dict:
     """Deep (recursive) transform from Namespace to dict"""
@@ -67,48 +69,7 @@ def config_to_string(cfg: Namespace, indent: int = 0,
 
 def parse_args(strict: bool = True) -> Namespace:
     arg_parser = ArgumentParser()
-    arg_parser.add_argument(
-        '-d', '--default-config-file',
-        default='',
-        type=str,
-        dest='default_config_file',
-        help='Default configuration file'
-    )
-    arg_parser.add_argument(
-        '-c', '--config-file',
-        default=["default"],
-        type=str,
-        nargs="+",
-        dest='config_files',
-        help='Configuration file.'
-    )
-    arg_parser.add_argument(
-        '--configs-dir',
-        type=str,
-        default='./configs',
-        dest='configs_dir',
-        help='Folder to search for config files.'
-    )
-    arg_parser.add_argument(
-        '-e', '--experiment',
-        type=str,
-        default="",
-        dest="experiment",
-        help="Experiment. Overrides cf and dcf"
-    )
-    arg_parser.add_argument(
-        '--resume',
-        default=False,
-        action="store_true",
-        dest="resume"
-    )
-    arg_parser.add_argument(
-        '--out-dir',
-        type=str,
-        dest="out_dir"
-    )
-    arg_parser.add_argument("--ppid", type=int, dest="__ppid")
-    arg_parser.add_argument("--timestamp", type=str, dest="__timestamp")
+    add_experiment_args(arg_parser)
 
     if strict:
         return arg_parser.parse_args()
@@ -196,7 +157,7 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
         if value_of(cfg, 'verbose', 0) > 0:
             import sys
             sys.stdout.write(f"{clr('[Config]', 'red'):s} ")
-            if default_config_file != config_file:
+            if default_config_file and default_config_file != config_file:
                 print(f"Read {config_file:s} over {default_config_file:s}.")
             else:
                 print(f"Read {config_file:s}.")
