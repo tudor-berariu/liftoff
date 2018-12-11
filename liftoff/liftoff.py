@@ -20,7 +20,7 @@ from .common.liftoff_config import get_liftoff_config, save_local_options
 from .common.miscellaneous import ask_user_yn
 from .common.sys_interaction import systime_to
 
-from .config import read_config, namespace_to_dict, config_to_string, value_of
+from .config import read_config, namespace_to_dict, config_to_string
 
 
 def parse_args() -> Namespace:
@@ -311,7 +311,7 @@ def run_from_system(root_path: str, timestamp: str,
     print(clr("All done!", attrs=["bold"]))
 
 
-def complete_args_from_liftoff_config(args: Namespace) -> None:
+def args_from_liftoff_config(args: Namespace) -> None:
     lft_cfg = get_liftoff_config()
     no_questions = lft_cfg is not None and lft_cfg.get("no_questions", False)
 
@@ -329,15 +329,28 @@ def complete_args_from_liftoff_config(args: Namespace) -> None:
             question = f"Do you want to save {args.module:s} as the " + \
                 "default script for this project?"
             new_options = {"history": {flag_name: True}}
-            if ask_user_yn(question):
-                new_options["module"] = args.module
+            try:
+                if ask_user_yn(question):
+                    new_options["module"] = args.module
+            except OSError:
+                return
             save_local_options(new_options)
+
+
+def create_symlink(experiment_path: str):
+    src = os.path.normpath(experiment_path)
+    dst = os.path.join(os.path.dirname(src), "latest")
+    #src = os.path.abspath(src)
+    dst = os.path.abspath(dst)
+    if os.path.islink(dst):
+        os.unlink(dst)
+    os.symlink(os.path.basename(src), dst)
 
 
 def main():
     args = parse_args()
 
-    complete_args_from_liftoff_config(args)
+    args_from_liftoff_config(args)
 
     print(config_to_string(args))
 
@@ -357,6 +370,8 @@ def main():
         # -------------------- STARTING A NEW EXPERIMENT --------------------
         full_name, experiment_path = create_new_experiment_folder(
             cfg0.experiment, args.timestamp_fmt, args.results_dir)
+
+    create_symlink(experiment_path)
 
     timestamp, *_other = full_name.split("_")
 
