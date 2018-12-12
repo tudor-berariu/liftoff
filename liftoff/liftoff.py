@@ -1,113 +1,39 @@
 from argparse import ArgumentParser, Namespace
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional
 from copy import deepcopy
 import sys
 import os
 from functools import partial
-import re
 from importlib import import_module
 import multiprocessing
 import multiprocessing.pool
 import time
-from datetime import datetime
 import traceback
 import subprocess
 import yaml
 from termcolor import colored as clr
 from numpy.random import shuffle
 
-from .config import read_config, namespace_to_dict, config_to_string, value_of
-from .utils.sys_interaction import systime_to
+from .common.argparsers import add_experiment_args, add_launch_args
+from .common.lookup import create_new_experiment_folder, get_latest_experiment
+from .common.liftoff_config import get_liftoff_config, save_local_options
+from .common.miscellaneous import ask_user_yn
+from .common.sys_interaction import systime_to
 
-Args = Namespace
-PID = int
+from .config import read_config, namespace_to_dict, config_to_string
 
 
-def parse_args() -> Args:
+def parse_args() -> Namespace:
     """If you need GPU magic, please use detached processes."""
-
+    # TODO: clean all the fucked up arguments below
     arg_parser = ArgumentParser()
-    arg_parser.add_argument(
-        "module",
-        default="learn.py",
-        help="Module where to call `run(args)` from.")
-    arg_parser.add_argument(
-        '--runs-no',
-        type=int,
-        default=1,
-        dest="runs_no"
-    )
-    arg_parser.add_argument(
-        '--resume',
-        default=False,
-        action="store_true",
-        dest="resume",
-        help="Resume last experiment or that indicated by timestamp.")
-    arg_parser.add_argument(
-        '--timestamp',
-        type=str,
-        dest="timestamp",
-        help="Timestamp of experiment to resume.")
-    arg_parser.add_argument(
-        "-p", "--procs-no",
-        default=4,
-        type=int,
-        dest="procs_no",
-        help="Number of concurrent processes.")
-    arg_parser.add_argument(
-        "-g", "--gpus",
-        default=[],
-        type=int,
-        nargs="*",
-        dest="gpus",
-        help="GPUs to distribute processes to.")
-    arg_parser.add_argument(
-        "--per-gpu",
-        default=0,
-        type=int,
-        dest="per_gpu",
-        help="Visible GPUs.")
-    arg_parser.add_argument(
-        "--no-detach",
-        default=False,
-        action="store_true",
-        dest="no_detach",
-        help="do not detach; spawn processes from python")
-    arg_parser.add_argument(
-        "--env",
-        type=str,
-        dest="env",
-        help="Conda environment.")
-    arg_parser.add_argument(
-        "--mkl",
-        type=int,
-        dest="mkl",
-        default=0,
-        help="Set MKL_NUM_THREADS. -1 not to change it.")
-    arg_parser.add_argument(
-        "--omp",
-        type=int,
-        dest="omp",
-        default=0,
-        help="Set OMP_NUM_THREADS. -1 not to change it.")
-    arg_parser.add_argument(
-        "--comment",
-        type=str,
-        dest="comment",
-        default="",
-        help="Short comment")
-    # TODO: What if an experiment started with a custom timestamp format is
-    # resumed with the default timestamp_format? :(
-    arg_parser.add_argument(
-        '--timestamp_fmt',
-        type=str,
-        dest="timestamp_fmt",
-        default="%Y%b%d-%H%M%S",
-        help="Default timestamp format.")
-    return arg_parser.parse_known_args()[0]
+    add_launch_args(arg_parser)
+    add_experiment_args(arg_parser)
+    return arg_parser.parse_args()
 
 
-def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
+def get_exp_args(cfgs: List[Namespace], root_path: str,
+                 runs_no: int) -> List[Namespace]:
     """Takes the configs read from files and augments them with
     out_dir, and run_id"""
 
@@ -175,7 +101,7 @@ def get_exp_args(cfgs: List[Args], root_path: str, runs_no: int) -> List[Args]:
 # Run experiments as locally spawned processes
 
 
-def wrapper(function: Callable[[Args], None], args: Args) -> None:
+def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
     start_file = os.path.join(args.out_dir, ".__start")
     end_file = os.path.join(args.out_dir, ".__end")
     crash_file = os.path.join(args.out_dir, ".__crash")
@@ -189,14 +115,14 @@ def wrapper(function: Callable[[Args], None], args: Args) -> None:
         systime_to(crash_file)
 
 
-def get_function(args: Args) -> Callable[[Args], None]:
+def get_function(args: Namespace) -> Callable[[Namespace], None]:
     sys.path.append(os.getcwd())
     module_name = args.module
     if module_name.endswith(".py"):
         module_name = module_name[:-3]
         function = "run"
     else:
-    	module_name, function = module_name.split(".")
+        module_name, function = module_name.split(".")
 
     module = import_module(module_name)
     if function not in module.__dict__:
@@ -204,7 +130,7 @@ def get_function(args: Args) -> Callable[[Args], None]:
     return partial(wrapper, module.__dict__[function])
 
 
-def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
+def spawn_from_here(root_path: str, cfgs: List[Namespace], args: Namespace):
 
     # Figure out what should be executed
     function = get_function(args)
@@ -241,7 +167,7 @@ def spawn_from_here(root_path: str, cfgs: List[Args], args: Args) -> None:
 # --------------------------------------------
 # Start and detach experiments using nohup
 
-def get_max_procs(args: Args) -> int:
+def get_max_procs(args: Namespace) -> int:
     """Limit the number of processes by either CPU usage or GPU usage"""
     if args.gpus:
         return min(args.procs_no, args.per_gpu * len(args.gpus))
@@ -249,14 +175,11 @@ def get_max_procs(args: Args) -> int:
 
 
 def launch(py_file: str,
-           exp_args: Args,
+           exp_args: Namespace,
            timestamp: str,
            ppid: int,
            root_path: str,
-           env: Optional[str],
-           gpu: Optional[int] = None,
-           omp: Optional[int] = 0,
-           mkl: Optional[int] = 0) -> PID:
+           gpu: Optional[int] = None) -> int:
 
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
@@ -267,17 +190,8 @@ def launch(py_file: str,
 
     env_vars = ""
 
-    if mkl and mkl > 0:
-        env_vars = f"MKL_NUM_THREADS={mkl:d} {env_vars:s}"
-
-    if omp and omp > 0:
-        env_vars = f"OMP_NUM_THREADS={omp:d} {env_vars:s}"
-
     if gpu is not None:
         env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
-
-    if env:
-        env_vars = f"source activate {env:s}; {env_vars:s}"
 
     cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
           f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
@@ -285,7 +199,7 @@ def launch(py_file: str,
           f" --config-file cfg" +\
           f" --default-config-file cfg" +\
           f" --out-dir {exp_args.out_dir:s}" +\
-          f" --timestamp {timestamp:s} --ppid {ppid:d}" +\
+          f" --id {timestamp:s}_{ppid:d}" +\
           f" 2>{err_path:s} 1>{out_path:s}" +\
           f" && date +%s > {end_path:s}" +\
           f" || date +%s > {crash_path:s}'" +\
@@ -310,14 +224,14 @@ def launch(py_file: str,
     return pid
 
 
-def get_command(pid: PID) -> str:
+def get_command(pid: int) -> str:
     result = subprocess.run(f"ps -p {pid:d} -o cmd h",
                             stdout=subprocess.PIPE,
                             shell=True)
     return result.stdout.decode("utf-8").strip()
 
 
-def still_active(pid: PID, py_file: str) -> bool:
+def still_active(pid: int, py_file: str) -> bool:
     cmd = get_command(pid)
     # return cmd and (py_file in cmd)  # mypy doesn't like this
     if cmd:
@@ -332,8 +246,8 @@ def dump_pids(path, pids):
 
 
 def run_from_system(root_path: str, timestamp: str,
-                    cfgs: List[Args], args: Args) -> None:
-    active_procs: List[Tuple[PID, Optional[int]]] = []
+                    cfgs: List[Namespace], args: Namespace) -> None:
+    active_procs = []  # type: : List[Tuple[int, Optional[int]]]
     max_procs_no = get_max_procs(args)
     crt_pid = os.getpid()
     print(f"PID of current process is {crt_pid:d}.")
@@ -348,7 +262,6 @@ def run_from_system(root_path: str, timestamp: str,
         raise FileNotFoundError("Could not find {py_file:s}.")
 
     exp_args = get_exp_args(cfgs, root_path, args.runs_no)
-    env = value_of(args, "env", None)
 
     while exp_args:
         if len(active_procs) < max_procs_no:
@@ -359,7 +272,7 @@ def run_from_system(root_path: str, timestamp: str,
                     break
             next_args = exp_args.pop()
             new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
-                             env, gpu=gpu, omp=args.omp, mkl=args.mkl)
+                             gpu=gpu)
             active_procs.append((new_pid, gpu))
             dump_pids(root_path, [pid for (pid, _) in active_procs])
         else:
@@ -398,8 +311,47 @@ def run_from_system(root_path: str, timestamp: str,
     print(clr("All done!", attrs=["bold"]))
 
 
+def args_from_liftoff_config(args: Namespace) -> None:
+    lft_cfg = get_liftoff_config()
+    no_questions = lft_cfg is not None and lft_cfg.get("no_questions", False)
+
+    if args.module is None:
+        if lft_cfg is not None and "module" in lft_cfg:
+            args.module = lft_cfg["module"]
+        else:
+            raise RuntimeError("You did not provide a script to be run.")
+    elif not no_questions and (lft_cfg is None or "module" not in lft_cfg):
+        flag_name = "asked_about_module"
+        asked = False
+        if lft_cfg is not None:
+            asked = lft_cfg.get("history", {}).get(flag_name, False)
+        if not asked:
+            question = f"Do you want to save {args.module:s} as the " + \
+                "default script for this project?"
+            new_options = {"history": {flag_name: True}}
+            try:
+                if ask_user_yn(question):
+                    new_options["module"] = args.module
+            except OSError:
+                return
+            save_local_options(new_options)
+
+
+def create_symlink(experiment_path: str):
+    src = os.path.normpath(experiment_path)
+    dst = os.path.join(os.path.dirname(src), "latest")
+    #src = os.path.abspath(src)
+    dst = os.path.abspath(dst)
+    if os.path.islink(dst):
+        os.unlink(dst)
+    os.symlink(os.path.basename(src), dst)
+
+
 def main():
     args = parse_args()
+
+    args_from_liftoff_config(args)
+
     print(config_to_string(args))
 
     # Read configuration files
@@ -408,90 +360,60 @@ def main():
     cfg0 = cfgs if not isinstance(cfgs, list) else cfgs[0]
     cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
 
-    root_path: str = None
-    timestamp: Optional[str] = None
-    if hasattr(args, "experiment"):
-        timestamp = args.timestamp
-
     if args.resume:
         # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
-        experiment = cfg0.experiment
-        if timestamp:
-            previous = [f for f in os.listdir("./results/")
-                        if f.startswith(str(timestamp))
-                        and f.endswith(experiment)]
-            if not previous:
-                raise Exception(
-                    f"No previous experiment with timestamp {timestamp:s}.")
-        else:
-            previous = [f for f in os.listdir("./results/")
-                        if f.endswith(experiment)]
-            if not previous:
-                raise Exception(f"No previous experiment {experiment:s}.")
-
-        print("-->", previous)
-        last_time = max([datetime.strptime(f.split("_")[0], args.timestamp_fmt)
-                        for f in previous])
-        last_time = f"{last_time:{args.timestamp_fmt:s}}"
-        print(f"Resuming, {last_time} !")
-        root_path = os.path.join("results", f"{last_time:s}_{experiment:s}")
-        timestamp = last_time
-        if not os.path.isdir(root_path):
-            raise Exception(f"{root_path:s} is not a folder.")
-        with open(os.path.join(root_path, ".__timestamp"), "r") as t_file:
-            if t_file.readline().strip() != timestamp:
-                raise Exception(f"{root_path:s} has the wrong timestamp.")
-
+        full_name, experiment_path = get_latest_experiment(cfg0.experiment,
+                                                           args.timestamp,
+                                                           args.timestamp_fmt,
+                                                           args.results_dir)
     else:
         # -------------------- STARTING A NEW EXPERIMENT --------------------
-        timestamp = f"{datetime.now():{args.timestamp_fmt:s}}"
-        root_path = f"results/{timestamp:s}_{cfg0.experiment:s}/"
-        while os.path.exists(root_path):
-            timestamp = f"{datetime.now():{args.timestamp_fmt:s}}"
-            root_path = f"results/{timestamp:s}_{cfg0.experiment:s}/"
-        os.makedirs(root_path)
-        with open(os.path.join(root_path, ".__timestamp"), "w") as t_file:
-            t_file.write(f"{timestamp:s}\n")
+        full_name, experiment_path = create_new_experiment_folder(
+            cfg0.experiment, args.timestamp_fmt, args.results_dir)
 
-    with open(os.path.join(root_path, ".__ppid"), "w") as ppid_file:
+    create_symlink(experiment_path)
+
+    timestamp, *_other = full_name.split("_")
+
+    with open(os.path.join(experiment_path, ".__ppid"), "w") as ppid_file:
         ppid_file.write(f"{os.getpid():d}\n")
     if args.comment:
-        with open(os.path.join(root_path, ".__comment"), "w") as comment_file:
-            comment_file.write(args.comment)
+        with open(os.path.join(experiment_path, ".__comment"), "w") as c_file:
+            c_file.write(args.comment)
 
     if len(cfgs) == 1 and args.runs_no == 1:
-        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
             m_file.write("single\n")
 
         cfg = cfgs[0]
 
         # Check if .__end file is already there (experiment is over)
-        end_file = os.path.join(root_path, ".__end")
+        end_file = os.path.join(experiment_path, ".__end")
         if os.path.isfile(end_file):
             print(f"Skipping {cfgs[0].title:s}. {end_file:s} exists.")
             return
 
-        crash_file = os.path.join(root_path, ".__crash")
+        crash_file = os.path.join(experiment_path, ".__crash")
         if os.path.isfile(crash_file):
             os.remove(crash_file)
 
         # Dump config file if there is none
-        cfg_file = os.path.join(root_path, "cfg.yaml")
+        cfg_file = os.path.join(experiment_path, "cfg.yaml")
         if not os.path.isfile(cfg_file):
             with open(cfg_file, "w") as yaml_file:
                 yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
                                default_flow_style=False)
-        open(os.path.join(root_path, ".__leaf"), "a").close()
-        cfg.out_dir, cfg.run_id = root_path, 0
+        open(os.path.join(experiment_path, ".__leaf"), "a").close()
+        cfg.out_dir, cfg.run_id = experiment_path, 0
         get_function(args)(cfg)
     elif args.no_detach:
-        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
             m_file.write("multiprocess\n")
-        spawn_from_here(root_path, cfgs, args)
+        spawn_from_here(experiment_path, cfgs, args)
     else:
-        with open(os.path.join(root_path, ".__mode"), "w") as m_file:
+        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
             m_file.write("nohup\n")
-        run_from_system(root_path, timestamp, cfgs, args)
+        run_from_system(experiment_path, timestamp, cfgs, args)
 
 
 if __name__ == "__main__":

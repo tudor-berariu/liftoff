@@ -5,10 +5,10 @@ import hashlib
 import yaml
 import urwid
 
-from liftoff.version import version
-from liftoff.config import config_to_string, dict_to_namespace
-from liftoff.common import get_latest_experiment
-from liftoff.common import add_experiment_lookup_args
+from .version import version
+from .config import config_to_string, dict_to_namespace
+from .common.argparsers import add_experiment_lookup_args
+from .common.lookup import get_latest_experiment
 
 
 def parse_args() -> Namespace:

@@ -9,9 +9,9 @@ import yaml
 from tabulate import tabulate
 from termcolor import colored as clr
 
-from liftoff.common import get_latest_experiment
-from liftoff.common import add_experiment_lookup_args
-from liftoff.version import welcome
+from .common.argparsers import add_experiment_lookup_args
+from .common.lookup import get_latest_experiment
+from .version import welcome
 
 
 def add_reporting_args(arg_parser: ArgumentParser) -> None:
