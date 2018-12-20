@@ -47,6 +47,13 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         action="store_true",
         help="Show just the title for each run."
     )
+    arg_parser.add_argument(
+        "--show_id",
+        dest="show_id",
+        default=False,
+        action="store_true",
+        help="Add a column with the id of each experiment."
+    )
 
 
 def parse_args() -> Namespace:
@@ -72,7 +79,26 @@ def get_run_summary(run_path: str) -> dict:
     return dict({})
 
 
-def get_run_parameters(run_path: str, just_title: bool = False) -> dict:
+def deduce_experiment_id(run_path: str) -> int:
+    dirs = os.path.split(run_path)
+    if len(dirs) == 0:
+        return 0
+    if '_' in dirs[-1]:
+        maybe_experiment = dirs[-1]
+    else:
+        try:
+            int(dirs[-1])
+            maybe_experiment = dirs[-2]
+        except:
+            return 0
+    try:
+        return int(maybe_experiment.split('_')[0])
+    except:
+        return 0
+
+def get_run_parameters(run_path: str, 
+                        just_title: bool = False,
+                        show_id: bool = False) -> dict:
     cfg_path = os.path.join(run_path, "cfg.yaml")
 
     if os.path.isfile(cfg_path):
@@ -80,9 +106,15 @@ def get_run_parameters(run_path: str, just_title: bool = False) -> dict:
             all_data = yaml.load(handler, Loader=yaml.SafeLoader)
         if (not just_title) and "_experiment_parameters" in all_data:
             data = all_data["_experiment_parameters"]
+            if show_id:
+                data["experiment_id"] = all_data.get("experiment_id", \
+                                            deduce_experiment_id(run_path))
             data["run_id"] = all_data.get("run_id", 0)
         else:
             data = {}
+            if show_id:
+                data["experiment_id"] = all_data.get("experiment_id", \
+                                            deduce_experiment_id(run_path))
             data["run_id"] = all_data.get("run_id", 0)
             data["title"] = all_data["title"]
         return data
@@ -90,12 +122,14 @@ def get_run_parameters(run_path: str, just_title: bool = False) -> dict:
 
 
 def collect_runs(exp_path: str, individual: bool = False,
-                 just_title: bool = False):
+                 just_title: bool = False, show_id: bool = False):
     all_runs = dict({})  # type: Dict[str, Any]
     for run_path, _, files in os.walk(exp_path):
         if ".__leaf" in files:
             summary = get_run_summary(run_path)
-            details = get_run_parameters(run_path, just_title=just_title)
+            details = get_run_parameters(run_path, 
+                                        just_title=just_title,
+                                        show_id=show_id)
 
             if individual:
                 all_runs[run_path] = (summary, details)
@@ -183,7 +217,8 @@ def elite() -> None:
     print("Experiment", clr(exp_name, "yellow", attrs=['bold']), "\n")
 
     all_runs = collect_runs(exp_path, args.individual,
-                            just_title=args.just_title)
+                            just_title=args.just_title,
+                            show_id=args.show_id)
     sort_criteria = process_sort_fields(args.sort_fields)
     if not args.individual:
         all_runs = aggregate(all_runs, sort_criteria)
