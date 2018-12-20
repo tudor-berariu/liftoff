@@ -48,7 +48,7 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         help="Show just the title for each run."
     )
     arg_parser.add_argument(
-        "--show_id",
+        "--show-id",
         dest="show_id",
         default=False,
         action="store_true",
