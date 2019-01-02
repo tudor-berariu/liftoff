@@ -32,6 +32,15 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         help="Sort by these fields.",
     )
     arg_parser.add_argument(
+        "-f",
+        "--filter",
+        type=str,
+        nargs="*",
+        dest="filters",
+        default=[],
+        help="Filter by these conditions.",
+    )
+    arg_parser.add_argument(
         "-i",
         "--individual",
         dest="individual",
@@ -99,14 +108,15 @@ def get_run_parameters(run_path: str, just_title: bool = False) -> dict:
             data = {}
             data["run_id"] = all_data.get("run_id", 0)
             data["title"] = all_data["title"]
-        return data
-    return dict({})
+        return data, all_data.get("_experiment_parameters", dict({}))
+    return dict({}), dict({})
 
 
 def collect_runs(  # pylint: disable=C0330
     exp_path: str,
     individual: bool = False,
     just_title: bool = False,
+    filters: List[str] = [],
     get_all: bool = False,
 ):
     all_runs = dict({})  # type: Dict[str, Any]
@@ -115,7 +125,21 @@ def collect_runs(  # pylint: disable=C0330
             summary = get_run_summary(run_path)
             if (not summary) and (not get_all):
                 continue
-            details = get_run_parameters(run_path, just_title=just_title)
+            details, full_details = get_run_parameters(
+                run_path, just_title=just_title
+            )
+
+            not_good = False
+            for (key, value) in filters:
+                if key in full_details and value != str(full_details[key]):
+                    not_good = True
+                    break
+                if key in summary and value != str(summary[key]):
+                    not_good = True
+                    break
+
+            if not_good:
+                continue
 
             if individual:
                 all_runs[run_path] = (summary, details)
@@ -207,6 +231,7 @@ def elite() -> None:
         exp_path,
         args.individual,
         just_title=args.just_title,
+        filters=[tuple(cond.split("=")) for cond in args.filters],
         get_all=args.get_all,
     )
     sort_criteria = process_sort_fields(args.sort_fields)
