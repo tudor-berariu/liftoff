@@ -11,7 +11,7 @@ import tabulate
 from .common.liftoff_config import get_liftoff_config
 from .common.argparsers import add_experiment_lookup_args
 from .common.tips import display_tips
-
+from .version import welcome
 
 Args = Namespace
 PID = int
@@ -399,8 +399,8 @@ def display_progress(
     print("If there are lost experiments 'Px', and 'Time left' might be wrong.")
 
 
-def ask_user(experiments: List[Experiment], to_kill: List[PID]):
-    display_progress(experiments)
+def ask_user(experiments: List[Experiment], to_kill: List[PID], args):
+    display_progress(experiments, args)
     b_to_kill = [clr(t, "yellow", attrs=["bold"]) for t in to_kill]
     answer = (
         str(
@@ -413,15 +413,12 @@ def ask_user(experiments: List[Experiment], to_kill: List[PID]):
         .lower()
         .strip()
     )
-    try:
-        if answer[0] == "y":
-            return True
-        elif answer[0] == "n":
-            return False
-        return ask_user(experiments, to_kill)
-    except Exception as error:
-        print(error)
-        return ask_user(experiments, to_kill)
+
+    if answer[0] == "y":
+        return True
+    elif answer[0] == "n":
+        return False
+    return ask_user(experiments, to_kill, args)
 
 
 def kill_all(experiment: Experiment):
@@ -432,10 +429,12 @@ def kill_all(experiment: Experiment):
 
     if experiment.mode in ["single", "multiprocess"]:
         return
-
-    cmd = f"for p in `pgrep -f '"
-    cmd += f"\\-\\-timestamp {experiment.timestamp:s}"
-    cmd += f" \\-\\-ppid {experiment.ppid:d}'`; do kill $p; done"
+    # TODO: cross-check with active pids
+    cmd = (
+        f"for p in `pgrep -f '"
+        f"python -u.*\\-\\-id {experiment.timestamp:s}_{experiment.ppid:d}'`; "
+        + "do kill $p; done"
+    )
 
     result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
     if result.stderr:
@@ -443,6 +442,7 @@ def kill_all(experiment: Experiment):
 
 
 def status() -> None:
+    welcome()
     args = parse_args()
     params = [args.timestamp, args.experiment, args.results_dir]
     if not args.all:
@@ -458,7 +458,9 @@ def status() -> None:
 
 
 def abort() -> None:
+    welcome()
     args = parse_args()
+    args.short = True
     params = [args.timestamp, args.experiment, args.results_dir]
     experiments = get_running_liftoffs(*params)
     if len(experiments) > 1 and not args.all:
@@ -472,10 +474,8 @@ def abort() -> None:
         to_kill = [e.timestamp for e in experiments]
 
     if not to_kill:
-        print("Nothing to murder here.")
-        return
-
-    if ask_user(experiments, to_kill):
+        print(clr("Nothing to murder here.", attrs=["bold"]))
+    elif ask_user(experiments, to_kill, args):
         for exp in experiments:
             if exp.timestamp in to_kill:
                 print(
@@ -483,3 +483,8 @@ def abort() -> None:
                     f"(PID={exp.ppid:d})!"
                 )
                 kill_all(exp)
+
+    config = get_liftoff_config()
+    if not config or not config.get("no_tips", False):
+        print("")
+        display_tips(topic="abort")
