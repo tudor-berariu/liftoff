@@ -4,6 +4,8 @@ from argparse import ArgumentParser, Namespace
 import hashlib
 import yaml
 import urwid
+import locale
+locale.setlocale(locale.LC_ALL, ('en_US', 'UTF-8'))
 
 from .version import version
 from .config import config_to_string, dict_to_namespace
