@@ -7,12 +7,20 @@ TIPS = [
         "You can see all experiments "
         "(not just those that are currently running) with this command:\n\t"
         + clr("liftoff-status -a", "red", attrs=["bold"]),
-        "status",
+        ["status"],
     ),
     (
         "You can see a narrower table of experiments with this command:\n\t "
         + clr("liftoff-status -r", "red", attrs=["bold"]),
-        "status",
+        ["status"],
+    ),
+    (
+        "You can resume an incomplete experiment using the "
+        + clr("--resume", "red")
+        + " flag in liftoff.\n"
+        + "  Runs that crashed or did not even start will be (re)launched.\n"
+        + "  Crashed experiments could start from a saved checkpoint.",
+        ["abort", "launch"],
     ),
 ]
 
