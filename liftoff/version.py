@@ -17,7 +17,7 @@ def version() -> str:
     import liftoff
 
     commit = get_active_branch_commit(liftoff.__file__)
-    return "0.2.2" + commit  # TODO: change this when a ne version is released
+    return "0.22" + commit  # TODO: change this when a ne version is released
 
 
 def project_repo():
