@@ -6,12 +6,12 @@ TIPS = [
     (
         "You can see all experiments "
         "(not just those that are currently running) with this command:\n\t"
-        + clr("liftoff-status -a", "red", attrs=["bold"]),
+        + clr("liftoff-status -a", "red"),
         ["status"],
     ),
     (
         "You can see a narrower table of experiments with this command:\n\t "
-        + clr("liftoff-status -r", "red", attrs=["bold"]),
+        + clr("liftoff-status -r", "red"),
         ["status"],
     ),
     (
@@ -25,8 +25,21 @@ TIPS = [
     (
         "You can exclude specific combinations when using "
         + clr("liftoff-prepare", "red")
-        + ".\n",
+        + ".",
         ["prepare"],
+    ),
+    (
+        "You can inspect summary results in an experiment using "
+        + clr("liftoff-elite", "red")
+        + ".",
+        ["status", "launch", "elite"],
+    ),
+    (
+        "You can sort the entries in "
+        + clr("liftoff-elite", "red")
+        + "  by any number of fields in any order:\n\t"
+        + clr("liftoff-elite -s perf:asc time:desc", "red"),
+        ["status", "launch", "elite"],
     ),
 ]
 
