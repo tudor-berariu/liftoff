@@ -64,6 +64,7 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
                 if os.path.isfile(crash_file):
                     os.remove(crash_file)
                 new_cfg = deepcopy(cfg)
+                new_cfg.experiment_id = j
                 new_cfg.run_id = run_id
                 new_cfg.out_dir = exp_path
                 new_cfg.cfg_dir = exp_path
@@ -85,6 +86,7 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
                     os.remove(crash_file)
                 new_cfg = deepcopy(cfg)
                 new_cfg.run_id = 0
+                new_cfg.experiment_id = j
                 new_cfg.out_dir = alg_path
                 new_cfg.cfg_dir = alg_path
                 exp_args.append(new_cfg)
@@ -388,6 +390,7 @@ def main():
             m_file.write("single\n")
 
         cfg = cfgs[0]
+        cfg.experiment_id = 0
 
         # Check if .__end file is already there (experiment is over)
         end_file = os.path.join(experiment_path, ".__end")
