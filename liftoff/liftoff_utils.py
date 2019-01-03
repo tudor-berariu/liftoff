@@ -442,7 +442,6 @@ def kill_all(experiment: Experiment):
 
 
 def status() -> None:
-    welcome()
     args = parse_args()
     params = [args.timestamp, args.experiment, args.results_dir]
     if not args.all:
@@ -452,8 +451,8 @@ def status() -> None:
 
     config = get_liftoff_config()
     display_progress(experiments, args, config=config)
+    welcome()
     if not config or not config.get("no_tips", False):
-        print("")
         display_tips(topic="status")
 
 

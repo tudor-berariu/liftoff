@@ -6,7 +6,7 @@ import yaml
 from termcolor import colored as clr
 
 from .common.argparsers import add_experiment_args
-
+from .version import get_branch_commit
 
 def namespace_to_dict(namespace: Namespace) -> dict:
     """Deep (recursive) transform from Namespace to dict"""
@@ -126,6 +126,8 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
 
     cfgs: List[Namespace] = []
 
+    commit = get_branch_commit(".")
+
     for config_file in config_files:
         with open(os.path.join(path, config_file)) as handler:
             config_data = yaml.load(handler, Loader=yaml.SafeLoader)
@@ -151,6 +153,11 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
         cfg.resume = args.resume
         if hasattr(args, "out_dir"):
             cfg.out_dir = args.out_dir
+
+        if commit:
+            cfg.commit = f"{commit[1]:s}@{commit[0]}"
+        else:
+            cfg.commit = None
 
         cfgs.append(cfg)
 
