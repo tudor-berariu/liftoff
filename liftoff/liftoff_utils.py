@@ -10,7 +10,8 @@ import tabulate
 
 from .common.liftoff_config import get_liftoff_config
 from .common.argparsers import add_experiment_lookup_args
-
+from .common.tips import display_tips
+from .version import welcome
 
 Args = Namespace
 PID = int
@@ -32,42 +33,53 @@ def parse_args() -> Args:
     add_experiment_lookup_args(arg_parser)
 
     arg_parser.add_argument(
-        "-a", "--all", action="store_true", dest="all",
-        help="Apply to all running experiments.")
+        "-a",
+        "--all",
+        action="store_true",
+        dest="all",
+        help="Apply to all running experiments.",
+    )
     arg_parser.add_argument(
-        "-r", "--resumed", action="store_true", dest="short",
-        help="Display short table.")
+        "-r",
+        "--resumed",
+        action="store_true",
+        dest="short",
+        help="Display short table.",
+    )
     arg_parser.add_argument(
-        "-s", "--sort", dest="sort", default=None,
-        help="Sort by column.")
+        "-s", "--sort", dest="sort", default=None, help="Sort by column."
+    )
 
     return arg_parser.parse_args()
 
 
 # -- Code for running processes
 
-def get_running_liftoffs(timestamp: Optional[str],
-                         experiment: Optional[str],
-                         results_dir: str)-> List[Experiment]:
+
+def get_running_liftoffs(
+    timestamp: Optional[str], experiment: Optional[str], results_dir: str
+) -> List[Experiment]:
 
     if not os.listdir(results_dir):
         return []
 
-    cmd = "COLUMNS=0 pgrep liftoff" \
-        " | xargs -r -n 1 grep " \
-        f"--files-with-matches {results_dir:s}/*/.__ppid -e" \
-        " | xargs -n 1 -r dirname" \
-        " | xargs -n 1 -r -I_DIR -- " \
-        "sh -c 'echo _DIR" \
-        " $(cat _DIR/.__ppid)" \
-        " $(cat _DIR/.__mode)" \
-        " $(cat _DIR/.__timestamp)" \
+    cmd = (
+        "COLUMNS=0 pgrep liftoff"
+        " | xargs -r -n 1 grep "
+        f"--files-with-matches {results_dir:s}/*/.__ppid -e"
+        f" | grep -v {results_dir:s}/latest/"
+        " | xargs -n 1 -r dirname"
+        " | xargs -n 1 -r -I_DIR -- "
+        "sh -c 'echo _DIR"
+        " $(cat _DIR/.__ppid)"
+        " $(cat _DIR/.__mode)"
+        " $(cat _DIR/.__timestamp)"
         " $(echo _DIR | cut -f2- -d_)'"
+    )
 
-    result = subprocess.run(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            shell=True)
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
 
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -84,23 +96,29 @@ def get_running_liftoffs(timestamp: Optional[str],
         if mode == "single":
             pids = []
         elif mode == "multiprocess":
-            result = subprocess.run(f"ps --ppid {ppid:s} -o pid h",
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    shell=True)
+            result = subprocess.run(
+                f"ps --ppid {ppid:s} -o pid h",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                shell=True,
+            )
             if result.stderr:
                 raise Exception(result.stderr.decode("utf-8"))
-            pids = [int(l.strip())
-                    for l in result.stdout.decode("utf-8").split("\n") if l]
+            pids = [
+                int(l.strip())
+                for l in result.stdout.decode("utf-8").split("\n")
+                if l
+            ]
         elif mode == "nohup":
-            cmd = f"for p in "\
-                  f"`pgrep -f '\\-\\-id {tmstmp:s}_{ppid:s}'`"\
-                  f"; do COLUMNS=0 ps -p $p -o pid,ppid h; done"
+            cmd = (
+                f"for p in "
+                f"`pgrep -f '\\-\\-id {tmstmp:s}_{ppid:s}'`"
+                f"; do COLUMNS=0 ps -p $p -o pid,ppid h; done"
+            )
 
-            result = subprocess.run(cmd,
-                                    stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE,
-                                    shell=True)
+            result = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+            )
             if result.stderr:
                 raise Exception(result.stderr.decode("utf-8"))
             pids = []
@@ -117,26 +135,26 @@ def get_running_liftoffs(timestamp: Optional[str],
     return running
 
 
-WHAT_TO_SORT = {"time": "T",
-                "experiment": "experiment"}
+WHAT_TO_SORT = {"time": "T", "experiment": "experiment"}
 
 
-def get_all_from_results(timestamp: Optional[str],
-                         experiment: Optional[str],
-                         results_dir: str)-> List[Experiment]:
+def get_all_from_results(
+    timestamp: Optional[str], experiment: Optional[str], results_dir: str
+) -> List[Experiment]:
     experiments = get_running_liftoffs(timestamp, experiment, results_dir)
-    cmd = f"COLUMNS=0 find {results_dir:s}/*/.__timestamp 2>/dev/null" \
-        " | xargs -n 1 -r dirname" \
-        " | xargs -n 1 -r -I_DIR -- " \
-        "sh -c 'echo _DIR" \
-        " $(cat _DIR/.__mode)" \
-        " $(cat _DIR/.__timestamp)" \
+    cmd = (
+        f"COLUMNS=0 find {results_dir:s}/*/.__timestamp 2>/dev/null"
+        " | xargs -n 1 -r dirname"
+        " | xargs -n 1 -r -I_DIR -- "
+        "sh -c 'echo _DIR"
+        " $(cat _DIR/.__mode)"
+        " $(cat _DIR/.__timestamp)"
         " $(echo _DIR | cut -f2- -d_)'"
+    )
 
-    result = subprocess.run(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            shell=True)
+    result = subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
 
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -158,18 +176,34 @@ def get_all_from_results(timestamp: Optional[str],
     return experiments
 
 
-def display_progress(experiments: List[Experiment], args: Args = None):
-    headers = ["PID", "Timestamp", "Experiment",
-               "Running", "Done", "Crashed", "Lost", "Total", "Success",
-               "Px", "Avg.time", "T", "Time left", "Wall time",
-               "Obs"]
+def display_progress(
+    experiments: List[Experiment], args: Args = None, config: dict = None
+) -> None:
+    headers = [
+        "PID",
+        "Timestamp",
+        "Experiment",
+        "Running",
+        "Done",
+        "Crashed",
+        "Lost",
+        "Total",
+        "Success",
+        "Px",
+        "Avg.time",
+        "T",
+        "Time left",
+        "Wall time",
+        "Obs",
+    ]
     exp_info = {info: [] for info in headers}
 
     for experiment in experiments:
         exp_info["PID"].append(experiment.ppid)
         exp_info["Timestamp"].append(experiment.timestamp)
         exp_info["Experiment"].append(
-            clr(experiment.experiment, 'yellow', attrs=['bold']))
+            clr(experiment.experiment, "yellow", attrs=["bold"])
+        )
 
         comment_file_path = os.path.join(experiment.root_path, ".__comment")
         if os.path.isfile(comment_file_path):
@@ -241,9 +275,11 @@ def display_progress(experiments: List[Experiment], args: Args = None):
             left_no = total - done
             if factor and factor > 0 and lost == 0:
                 left_sec = int(
-                    round((left_no * avg_time - active_elapsed) / factor))
+                    round((left_no * avg_time - active_elapsed) / factor)
+                )
                 exp_info["Time left"].append(
-                    str(datetime.timedelta(seconds=left_sec)))
+                    str(datetime.timedelta(seconds=left_sec))
+                )
 
                 exp_info["T"].append(avg_time / factor)
             else:
@@ -261,32 +297,46 @@ def display_progress(experiments: List[Experiment], args: Args = None):
         exp_info["Done"].append(done)
         exp_info["Total"].append(total)
 
-    fkey = f"{clr('R', 'yellow'):s} + " \
-           f"{clr('C', 'red'):s} + " \
-           f"{clr('L', 'blue'):s} + " \
-           f"{clr('S', 'green', attrs=['bold']):s} = " \
-           f"{clr('Done', attrs=['bold']):s} / " \
-           f"{clr('Total', attrs=['bold']):s}"
+    fkey = (
+        f"{clr('R', 'yellow'):s} + "
+        f"{clr('C', 'red'):s} + "
+        f"{clr('L', 'blue'):s} + "
+        f"{clr('S', 'green', attrs=['bold']):s} = "
+        f"{clr('Done', attrs=['bold']):s} / "
+        f"{clr('Total', attrs=['bold']):s}"
+    )
 
     if exp_info["Running"]:
-        f_r = max(len(f'{r:d}') for r in exp_info['Running'])
-        f_c = max(len(f'{c:d}') for c in exp_info['Crashed'])
-        f_l = max(len(f'{l:d}') for l in exp_info['Lost'])
-        f_s = max(len(f'{s:d}') for s in exp_info['Success'])
-        f_d = max(len(f'{d:d}') for d in exp_info['Done'])
-        f_t = max(len(f'{t:d}') for t in exp_info['Total'])
+        f_r = max(len(f"{r:d}") for r in exp_info["Running"])
+        f_c = max(len(f"{c:d}") for c in exp_info["Crashed"])
+        f_l = max(len(f"{l:d}") for l in exp_info["Lost"])
+        f_s = max(len(f"{s:d}") for s in exp_info["Success"])
+        f_d = max(len(f"{d:d}") for d in exp_info["Done"])
+        f_t = max(len(f"{t:d}") for t in exp_info["Total"])
 
-        counts = zip(*[exp_info[l]
-                       for l in ["Running", "Crashed", "Lost", "Success",
-                                 "Done", "Total"]])
+        counts = zip(
+            *[
+                exp_info[l]
+                for l in [
+                    "Running",
+                    "Crashed",
+                    "Lost",
+                    "Success",
+                    "Done",
+                    "Total",
+                ]
+            ]
+        )
 
-        exp_info[fkey] = [f"{clr(f'{r:{f_r}d}', 'yellow'):s} + "
-                          f"{clr(f'{c:{f_c}d}', 'red'):s} + "
-                          f"{clr(f'{l:{f_l}d}', 'blue'):s} + "
-                          f"{clr(f'{s:{f_s}d}', 'green', attrs=['bold']):s} = "
-                          f"{clr(f'{d:{f_d}d}', attrs=['bold']):s} / "
-                          f"{clr(f'{t:{f_t}d}', attrs=['bold']):s}"
-                          for (r, c, l, s, d, t) in counts]
+        exp_info[fkey] = [
+            f"{clr(f'{r:{f_r}d}', 'yellow'):s} + "
+            f"{clr(f'{c:{f_c}d}', 'red'):s} + "
+            f"{clr(f'{l:{f_l}d}', 'blue'):s} + "
+            f"{clr(f'{s:{f_s}d}', 'green', attrs=['bold']):s} = "
+            f"{clr(f'{d:{f_d}d}', attrs=['bold']):s} / "
+            f"{clr(f'{t:{f_t}d}', attrs=['bold']):s}"
+            for (r, c, l, s, d, t) in counts
+        ]
     else:
         exp_info[fkey] = []
 
@@ -303,7 +353,6 @@ def display_progress(experiments: List[Experiment], args: Args = None):
     headers = ["PID", "Timestamp", "Experiment", fkey]
     extra = ["Time left", "Wall time", "Px", "Avg.time", "T"]
 
-    config = get_liftoff_config()
     if args and args.short:
         pass
     elif config and "status" in config and "headers" in config["status"]:
@@ -320,43 +369,56 @@ def display_progress(experiments: List[Experiment], args: Args = None):
         column = WHAT_TO_SORT[args.sort]
         values = exp_info[column]
         if column in ["T", "Avg.time", "Done", "Px"]:
+
             def key(x):
                 return x[1] if x[1] else float("inf")
+
         else:
+
             def key(x):
                 return x[1] if x[1] is not None else ""
+
         sorted_values = sorted(enumerate(values), key=key)
         new_indices = [idx for (idx, _) in sorted_values]
-        exp_info = {key: [values[i] for i in new_indices]
-                    for (key, values) in exp_info.items()}
+        exp_info = {
+            key: [values[i] for i in new_indices]
+            for (key, values) in exp_info.items()
+        }
 
     o_data = OrderedDict([(key, exp_info[key]) for key in headers])
 
     print(tabulate.tabulate(o_data, headers="keys"))
-    print('--')
-    print(f"{clr('R', 'yellow'):s} = {clr('Running', 'yellow'):s}; "
-          f"{clr('C', 'red'):s} = {clr('Crashed', 'red'):s} "
-          f"{clr('L', 'blue'):s} = {clr('Lost', 'blue'):s}; "
-          f"{clr('S', 'green', attrs=['bold']):s} = "
-          f"{clr('Success', 'green', attrs=['bold']):s}")
+    print("--")
+    print(
+        f"{clr('R', 'yellow'):s} = {clr('Running', 'yellow'):s}; "
+        f"{clr('C', 'red'):s} = {clr('Crashed', 'red'):s} "
+        f"{clr('L', 'blue'):s} = {clr('Lost', 'blue'):s}; "
+        f"{clr('S', 'green', attrs=['bold']):s} = "
+        f"{clr('Success', 'green', attrs=['bold']):s}"
+    )
     print("If there are lost experiments 'Px', and 'Time left' might be wrong.")
 
 
-def ask_user(experiments: List[Experiment], to_kill: List[PID]):
-    display_progress(experiments)
-    b_to_kill = [clr(t, 'yellow', attrs=['bold']) for t in to_kill]
-    answer = str(input(f"\nAre you sure you want to kill "
-                       f"{', '.join(b_to_kill):s}?"
-                       f" (y/n): ")).lower().strip()
-    try:
-        if answer[0] == 'y':
-            return True
-        elif answer[0] == 'n':
-            return False
-        return ask_user(experiments, to_kill)
-    except Exception as error:
-        print(error)
-        return ask_user(experiments, to_kill)
+def ask_user(experiments: List[Experiment], to_kill: List[PID], args):
+    display_progress(experiments, args)
+    b_to_kill = [clr(t, "yellow", attrs=["bold"]) for t in to_kill]
+    answer = (
+        str(
+            input(
+                f"\nAre you sure you want to kill "
+                f"{', '.join(b_to_kill):s}?"
+                f" (y/n): "
+            )
+        )
+        .lower()
+        .strip()
+    )
+
+    if answer[0] == "y":
+        return True
+    elif answer[0] == "n":
+        return False
+    return ask_user(experiments, to_kill, args)
 
 
 def kill_all(experiment: Experiment):
@@ -367,45 +429,62 @@ def kill_all(experiment: Experiment):
 
     if experiment.mode in ["single", "multiprocess"]:
         return
-
-    cmd = f"for p in `pgrep -f '"
-    cmd += f"\\-\\-timestamp {experiment.timestamp:s}"
-    cmd += f" \\-\\-ppid {experiment.ppid:d}'`; do kill $p; done"
+    # TODO: cross-check with active pids
+    cmd = (
+        f"for p in `pgrep -f '"
+        f"python -u.*\\-\\-id {experiment.timestamp:s}_{experiment.ppid:d}'`; "
+        + "do kill $p; done"
+    )
 
     result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
 
 
-def status()-> None:
+def status() -> None:
+    welcome()
     args = parse_args()
     params = [args.timestamp, args.experiment, args.results_dir]
     if not args.all:
         experiments = get_running_liftoffs(*params)
     else:
         experiments = get_all_from_results(*params)
-    display_progress(experiments, args)
+
+    config = get_liftoff_config()
+    display_progress(experiments, args, config=config)
+    if not config or not config.get("no_tips", False):
+        print("")
+        display_tips(topic="status")
 
 
 def abort() -> None:
+    welcome()
     args = parse_args()
+    args.short = True
     params = [args.timestamp, args.experiment, args.results_dir]
     experiments = get_running_liftoffs(*params)
     if len(experiments) > 1 and not args.all:
-        tmstmps = [datetime.datetime.strptime(e.timestamp, args.timestamp_fmt)
-                   for e in experiments]
+        tmstmps = [
+            datetime.datetime.strptime(e.timestamp, args.timestamp_fmt)
+            for e in experiments
+        ]
         latest_tmstmp = max(tmstmps)
         to_kill = [f"{latest_tmstmp:{args.timestamp_fmt:s}}"]
     else:
         to_kill = [e.timestamp for e in experiments]
 
     if not to_kill:
-        print("Nothing to murder here.")
-        return
-
-    if ask_user(experiments, to_kill):
+        print(clr("Nothing to murder here.", attrs=["bold"]))
+    elif ask_user(experiments, to_kill, args):
         for exp in experiments:
             if exp.timestamp in to_kill:
-                print(f"Killing {exp.experiment:s}_{exp.timestamp:s} "
-                      f"(PID={exp.ppid:d})!")
+                print(
+                    f"Killing {exp.experiment:s}_{exp.timestamp:s} "
+                    f"(PID={exp.ppid:d})!"
+                )
                 kill_all(exp)
+
+    config = get_liftoff_config()
+    if not config or not config.get("no_tips", False):
+        print("")
+        display_tips(topic="abort")

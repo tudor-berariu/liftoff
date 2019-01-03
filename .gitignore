@@ -2,6 +2,12 @@
 *~
 \#*#
 
+# VS cde
+.vscode
+
+# Files produced by experiments
+nohup.out
+.liftoff_cfg.yaml
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

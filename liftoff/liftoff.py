@@ -19,7 +19,7 @@ from .common.lookup import create_new_experiment_folder, get_latest_experiment
 from .common.liftoff_config import get_liftoff_config, save_local_options
 from .common.miscellaneous import ask_user_yn
 from .common.sys_interaction import systime_to
-
+from .version import welcome
 from .config import read_config, namespace_to_dict, config_to_string
 
 
@@ -350,6 +350,8 @@ def create_symlink(experiment_path: str):
 
 
 def main():
+    welcome()
+
     args = parse_args()
 
     args_from_liftoff_config(args)

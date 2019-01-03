@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Any, Dict, List, Tuple
+from typing import List
 import os
 from argparse import Namespace, ArgumentParser
 from itertools import chain
@@ -20,32 +20,55 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         type=int,
         dest="top_n",
         default=0,
-        help="Show top n individuals (averages). Default: 0 (all)")
+        help="Show top n individuals (averages). Default: 0 (all)",
+    )
     arg_parser.add_argument(
-        "-s", "--sort",
+        "-s",
+        "--sort",
         type=str,
         nargs="*",
         dest="sort_fields",
         default=[],
-        help="Sort by these fields.")
+        help="Sort by these fields.",
+    )
     arg_parser.add_argument(
-        "-i", "--individual",
+        "-f",
+        "--filter",
+        type=str,
+        nargs="*",
+        dest="filters",
+        default=[],
+        help="Filter by these conditions.",
+    )
+    arg_parser.add_argument(
+        "-i",
+        "--individual",
         dest="individual",
         default=False,
         action="store_true",
-        help="Do not average over runs.")
+        help="Do not average over runs.",
+    )
     arg_parser.add_argument(
         "--vert",
         dest="vertical",
         default=False,
         action="store_true",
-        help="Show on vertical")
+        help="Show on vertical",
+    )
     arg_parser.add_argument(
         "--title",
         dest="just_title",
         default=False,
         action="store_true",
-        help="Show just the title for each run."
+        help="Show just the title for each run.",
+    )
+    arg_parser.add_argument(
+        "-a",
+        "--all",
+        dest="get_all",
+        default=False,
+        action="store_true",
+        help="Display experiments with no summary also",
     )
     arg_parser.add_argument(
         "--show-id",
@@ -66,7 +89,7 @@ def parse_args() -> Namespace:
 def get_run_summary(run_path: str) -> dict:
     summary_path = os.path.join(run_path, "summary.pkl")
     if os.path.isfile(summary_path):
-        with open(summary_path, 'rb') as handler:
+        with open(summary_path, "rb") as handler:
             summary = pickle.load(handler)
         return summary
 
@@ -117,19 +140,42 @@ def get_run_parameters(run_path: str,
                                             deduce_experiment_id(run_path))
             data["run_id"] = all_data.get("run_id", 0)
             data["title"] = all_data["title"]
-        return data
-    return dict({})
+        return data, all_data.get("_experiment_parameters", dict({}))
+    return dict({}), dict({})
 
 
-def collect_runs(exp_path: str, individual: bool = False,
-                 just_title: bool = False, show_id: bool = False):
+
+def collect_runs(  # pylint: disable=C0330
+    exp_path: str,
+    individual: bool = False,
+    just_title: bool = False,
+    filters: List[str] = [],
+    get_all: bool = False,
+    show_id: bool = False,
+):
     all_runs = dict({})  # type: Dict[str, Any]
     for run_path, _, files in os.walk(exp_path):
         if ".__leaf" in files:
             summary = get_run_summary(run_path)
-            details = get_run_parameters(run_path, 
-                                        just_title=just_title,
-                                        show_id=show_id)
+
+            if (not summary) and (not get_all):
+                continue
+            details, full_details = get_run_parameters(
+                run_path, just_title=just_title, show_id=show_id
+            )
+
+            not_good = False
+            for (key, value) in filters:
+                if key in full_details and value != str(full_details[key]):
+                    not_good = True
+                    break
+                if key in summary and value != str(summary[key]):
+                    not_good = True
+                    break
+
+            if not_good:
+                continue
+
 
             if individual:
                 all_runs[run_path] = (summary, details)
@@ -138,8 +184,9 @@ def collect_runs(exp_path: str, individual: bool = False,
                 try:
                     run_id = int(maybe_run_id)
                     if run_id != details["run_id"]:
-                        raise RuntimeError("run_id does not match folder: " +
-                                           run_path)
+                        raise RuntimeError(
+                            "run_id does not match folder: " + run_path
+                        )
                     key = config_path
                 except ValueError:  # There were no extra runs
                     key = run_path
@@ -181,16 +228,16 @@ def get_top(all_runs: dict, top_n: int, sort_criteria: OrderedDict):
             val = val[0] if isinstance(val, tuple) else val
             key.append(val * (-1 if order == "desc" else 1))
         return tuple(key)
+
     srt = sorted(all_runs.items(), key=sort_key)
     if top_n > 0:
         srt = srt[:top_n]
     return srt
 
 
-def process_sort_fields(sort_fields: List[str],
-                        default_op: str = "avg",
-                        default_order: str = "desc"
-                        ) -> OrderedDict:
+def process_sort_fields(  #  pylint: disable=C0330
+    sort_fields: List[str], default_op: str = "avg", default_order: str = "desc"
+) -> OrderedDict:
     ops = ["max", "avg", "min"]
     orders = ["asc", "desc"]
 
@@ -214,11 +261,16 @@ def elite() -> None:
     args = parse_args()
     exp_name, exp_path = get_latest_experiment(**args.__dict__)
 
-    print("Experiment", clr(exp_name, "yellow", attrs=['bold']), "\n")
+    print("Experiment", clr(exp_name, "yellow", attrs=["bold"]), "\n")
 
-    all_runs = collect_runs(exp_path, args.individual,
-                            just_title=args.just_title,
-                            show_id=args.show_id)
+    all_runs = collect_runs(
+        exp_path,
+        args.individual,
+        just_title=args.just_title,
+        filters=[tuple(cond.split("=")) for cond in args.filters],
+        get_all=args.get_all,
+        show_id=args.show_id,
+    )
     sort_criteria = process_sort_fields(args.sort_fields)
     if not args.individual:
         all_runs = aggregate(all_runs, sort_criteria)
