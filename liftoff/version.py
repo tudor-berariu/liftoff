@@ -28,17 +28,10 @@ def project_repo():
 
 def welcome_msg(color: bool = True) -> str:
     if color:
-        return (
-            clr(
-                " Liftoff " + version() + " ",
-                "white",
-                "on_magenta",
-                attrs=["bold"],
-            )
-            + " @ "
-            + clr(
-                " " + project_repo() + " ", "white", "on_cyan", attrs=["bold"]
-            )
+        return clr(
+            f"Liftoff {version():s} @ {project_repo():s}",
+            "white",
+            attrs=["bold"],
         )
     return f"Liftoff {version():s} @ {project_repo():s}"
 
