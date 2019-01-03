@@ -7,6 +7,10 @@ from functools import partial
 import yaml
 from termcolor import colored as clr
 
+from .common.liftoff_config import get_liftoff_config
+from .common.tips import display_tips
+from .version import welcome
+
 # Typing
 
 VarId = int
@@ -21,25 +25,36 @@ BadPairs = Dict[Tuple[VarId, VarId], List[Tuple[Any, Any]]]
 def get_args() -> Namespace:
     """Read command line arguments for liftoff-prepare"""
     arg_parser = ArgumentParser("Prepare experiment for liftoff")
-    arg_parser.add_argument("experiment", type=str,
-                            help="Experiment to prepare")
-    arg_parser.add_argument("-f", "--force", action="store_true",
-                            default=False, dest="force",
-                            help="Delete other generated files if found.")
-    arg_parser.add_argument("-c", "--clean", action="store_true",
-                            default=False, dest="clean",
-                            help="Deletes generated files if found.")
+    arg_parser.add_argument(
+        "experiment", type=str, help="Experiment to prepare"
+    )
+    arg_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        default=False,
+        dest="force",
+        help="Delete other generated files if found.",
+    )
+    arg_parser.add_argument(
+        "-c",
+        "--clean",
+        action="store_true",
+        default=False,
+        dest="clean",
+        help="Deletes generated files if found.",
+    )
 
     return arg_parser.parse_args()
 
 
 def check_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
     """Checks required files for experiment"""
-    assert os.path.isdir('configs'), "configs folder is missing"
-    exp_path: str = os.path.join('configs', experiment)
+    assert os.path.isdir("configs"), "configs folder is missing"
+    exp_path: str = os.path.join("configs", experiment)
     assert os.path.isdir(exp_path), f"{exp_path:s} folder is missing"
 
-    default_path: str = os.path.join(exp_path, 'default.yaml')
+    default_path: str = os.path.join(exp_path, "default.yaml")
     assert os.path.isfile(default_path), f"{default_path:s} is missing"
 
     config_path: str = os.path.join(exp_path, f"config.yaml")
@@ -66,7 +81,7 @@ def to_var_path(val: Union[str, dict]) -> List[str]:
     raise ValueError
 
 
-def get_variables(config_data: dict)-> Tuple[Variables, Domains, BadPairs]:
+def get_variables(config_data: dict) -> Tuple[Variables, Domains, BadPairs]:
 
     if "filter_out" in config_data:
         filter_out = config_data["filter_out"]
@@ -100,8 +115,8 @@ def get_variables(config_data: dict)-> Tuple[Variables, Domains, BadPairs]:
         vp2: VarPath = to_var_path(bad_pair["right"])
         pairs: List[Tuple[Any, Any]] = list(map(tuple, bad_pair["exclude"]))
 
-        [var1_id] = [k for (k, v) in variables.items() if v[-len(vp1):] == vp1]
-        [var2_id] = [k for (k, v) in variables.items() if v[-len(vp2):] == vp2]
+        [var1_id] = [k for (k, v) in variables.items() if v[-len(vp1) :] == vp1]
+        [var2_id] = [k for (k, v) in variables.items() if v[-len(vp2) :] == vp2]
 
         assert all(x in domains[var1_id] for (x, _) in pairs)
         assert all(y in domains[var2_id] for (_, y) in pairs)
@@ -111,7 +126,7 @@ def get_variables(config_data: dict)-> Tuple[Variables, Domains, BadPairs]:
 
         bad_pairs[(var1_id, var2_id)] = pairs
 
-        p_str = ', '.join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
+        p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
         v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
         print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
 
@@ -144,14 +159,19 @@ def check_assignment(bad_pairs: BadPairs, assignment: Assignment) -> bool:
     return True
 
 
-def prod_domains(domains: Domains, bad_pairs: BadPairs)-> Iterable[Assignment]:
-    return filter(partial(check_assignment, bad_pairs),
-                  map(lambda a: {k: v for (k, v) in zip(domains.keys(), a)},
-                      product(*domains.values())))
+def prod_domains(domains: Domains, bad_pairs: BadPairs) -> Iterable[Assignment]:
+    return filter(
+        partial(check_assignment, bad_pairs),
+        map(
+            lambda a: {k: v for (k, v) in zip(domains.keys(), a)},
+            product(*domains.values()),
+        ),
+    )
 
 
-def combine_values(variables: Variables, values: Assignment,
-                   names: Dict[int, str]) -> dict:
+def combine_values(
+    variables: Variables, values: Assignment, names: Dict[int, str]
+) -> dict:
     crt_values: dict = {}
     info: List[str] = []
     for var_id, value in values.items():
@@ -160,7 +180,7 @@ def combine_values(variables: Variables, values: Assignment,
         for key in var_path[:-1]:
             parent = parent.setdefault(key, {})
         parent[var_path[-1]] = copy(value)
-        name = names[var_id].strip('_')
+        name = names[var_id].strip("_")
         if isinstance(value, dict) and "__name" in value:
             info.append(f"{name:s}={value['__name']:s}")
         else:
@@ -170,8 +190,11 @@ def combine_values(variables: Variables, values: Assignment,
 
 
 def main():
+
+    welcome()
+
     args = get_args()  # type: Namespace
-    experiment = args.experiment.strip('/')  # type: str
+    experiment = args.experiment.strip("/")  # type: str
     exp_path, config_path = check_paths(experiment, args.force or args.clean)
 
     if args.clean:
@@ -187,14 +210,17 @@ def main():
     names = get_names(variables)
 
     for var_id, name in names.items():
-        print(f"{len(domains[var_id]):d} values for "
-              f"{clr(name, attrs=['bold']):s}")
+        print(
+            f"{len(domains[var_id]):d} values for "
+            f"{clr(name, attrs=['bold']):s}"
+        )
 
     num = 0
     for idx, values in enumerate(prod_domains(domains, bad_pairs)):
         crt_values = combine_values(variables, values, names)
-        crt_values["_experiment_parameters"] = \
-            {names[var_id]: value for var_id, value in values.items()}
+        crt_values["_experiment_parameters"] = {
+            names[var_id]: value for var_id, value in values.items()
+        }
         file_path = os.path.join(exp_path, f"{experiment:s}_{idx:d}.yaml")
         with open(file_path, "w") as yaml_file:
             yaml.safe_dump(crt_values, yaml_file, default_flow_style=False)
@@ -202,6 +228,11 @@ def main():
 
     print(f"{clr(f'{num:d} configurations', attrs=['bold']):s} created.")
     print("done.")
+
+    config = get_liftoff_config()
+    if not config or not config.get("no_tips", False):
+        print("")
+        display_tips(topic="prepare")
 
 
 if __name__ == "__main__":

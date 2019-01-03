@@ -22,6 +22,12 @@ TIPS = [
         + "  Crashed experiments could start from a saved checkpoint.",
         ["abort", "launch"],
     ),
+    (
+        "You can exclude specific combinations when using "
+        + clr("liftoff-prepare", "red")
+        + ".\n",
+        ["prepare"],
+    ),
 ]
 
 
@@ -30,4 +36,6 @@ def display_tips(topic=None):
         good_tips = TIPS
     else:
         good_tips = [(msg,) for (msg, topics) in TIPS if topic in topics]
+        if not good_tips:
+            good_tips = TIPS
     print(clr("TIP!", "green"), good_tips[randint(0, len(good_tips) - 1)][0])
