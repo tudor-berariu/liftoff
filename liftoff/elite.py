@@ -1,5 +1,12 @@
+""" Code for liftoff-elite which looks into multiple experiments/runs and
+    reports info from their summaries.
+
+    TODO: allow for multiple summaries for the same run (e.g. multiprocessing)
+    TODO: sort by info columns
+"""
+
 from collections import OrderedDict
-from typing import List
+from typing import List, Tuple
 import os
 from argparse import Namespace, ArgumentParser
 from itertools import chain
@@ -10,11 +17,14 @@ from tabulate import tabulate
 from termcolor import colored as clr
 
 from .common.argparsers import add_experiment_lookup_args
-from .common.lookup import get_latest_experiment
+from .common.lookup import get_latest_experiments
 from .version import welcome
 
 
 def add_reporting_args(arg_parser: ArgumentParser) -> None:
+    """ This function adds to an ArgumentParser the command line arguments
+        specific to liftoff-elite.
+    """
     arg_parser.add_argument(
         "-n",
         type=int,
@@ -37,7 +47,6 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         type=str,
         nargs="*",
         dest="filters",
-        default=[],
         help="Filter by these conditions.",
     )
     arg_parser.add_argument(
@@ -75,13 +84,16 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         dest="show_id",
         default=False,
         action="store_true",
-        help="Add a column with the id of each experiment."
+        help="Add a column with the id of each experiment.",
     )
 
 
 def parse_args() -> Namespace:
+    """ This function builds the ArgumentParser and then parses the command
+        line arguments.
+    """
     arg_parser = ArgumentParser()
-    add_experiment_lookup_args(arg_parser)
+    add_experiment_lookup_args(arg_parser, multiple=True)
     add_reporting_args(arg_parser)
     return arg_parser.parse_args()
 
@@ -104,9 +116,9 @@ def get_run_summary(run_path: str) -> dict:
 
 def deduce_experiment_id(run_path: str) -> int:
     dirs = os.path.split(run_path)
-    if len(dirs) == 0:
+    if not dirs:
         return 0
-    if '_' in dirs[-1]:
+    if "_" in dirs[-1]:
         maybe_experiment = dirs[-1]
     else:
         try:
@@ -115,13 +127,14 @@ def deduce_experiment_id(run_path: str) -> int:
         except:
             return 0
     try:
-        return int(maybe_experiment.split('_')[0])
+        return int(maybe_experiment.split("_")[0])
     except:
         return 0
 
-def get_run_parameters(run_path: str, 
-                        just_title: bool = False,
-                        show_id: bool = False) -> dict:
+
+def get_run_parameters(  # pylint: disable:bad-continuation
+    run_path: str, just_title: bool = False, show_id: bool = False
+) -> dict:
     cfg_path = os.path.join(run_path, "cfg.yaml")
 
     if os.path.isfile(cfg_path):
@@ -130,30 +143,48 @@ def get_run_parameters(run_path: str,
         if (not just_title) and "_experiment_parameters" in all_data:
             data = all_data["_experiment_parameters"]
             if show_id:
-                data["experiment_id"] = all_data.get("experiment_id", \
-                                            deduce_experiment_id(run_path))
+                data["experiment_id"] = all_data.get(
+                    "experiment_id", deduce_experiment_id(run_path)
+                )
             data["run_id"] = all_data.get("run_id", 0)
         else:
             data = {}
             if show_id:
-                data["experiment_id"] = all_data.get("experiment_id", \
-                                            deduce_experiment_id(run_path))
+                data["experiment_id"] = all_data.get(
+                    "experiment_id", deduce_experiment_id(run_path)
+                )
             data["run_id"] = all_data.get("run_id", 0)
             data["title"] = all_data["title"]
         return data, all_data.get("_experiment_parameters", dict({}))
     return dict({}), dict({})
 
 
+def filter_run(details: dict, filters: List[Tuple[str, str, str]]) -> bool:
+    """ Checks if the details of a run match the filters or not. Missing keys
+        are ok.
+    """
+    for (key, operator, value) in filters:
+        if key in details:
+            if operator == "=" and value != str(details[key]):
+                return False
+            if operator == ">" and float(value) >= float(details[key]):
+                return False
+            if operator == "<" and float(value) <= float(details[key]):
+                return False
+    return True
 
-def collect_runs(  # pylint: disable=C0330
+
+def collect_runs(  # pylint: disable=bad-continuation
     exp_path: str,
     individual: bool = False,
     just_title: bool = False,
-    filters: List[str] = [],
+    filters: List[Tuple[str, str, str]] = None,
     get_all: bool = False,
     show_id: bool = False,
-):
-    all_runs = dict({})  # type: Dict[str, Any]
+    all_runs: dict = None,
+) -> dict:
+    if all_runs is None:
+        all_runs = dict({})  # type: Dict[str, Any]
     for run_path, _, files in os.walk(exp_path):
         if ".__leaf" in files:
             summary = get_run_summary(run_path)
@@ -164,18 +195,11 @@ def collect_runs(  # pylint: disable=C0330
                 run_path, just_title=just_title, show_id=show_id
             )
 
-            not_good = False
-            for (key, value) in filters:
-                if key in full_details and value != str(full_details[key]):
-                    not_good = True
-                    break
-                if key in summary and value != str(summary[key]):
-                    not_good = True
-                    break
-
-            if not_good:
-                continue
-
+            if filters:
+                if not filter_run(full_details, filters):
+                    continue
+                if not filter_run(summary, filters):
+                    continue
 
             if individual:
                 all_runs[run_path] = (summary, details)
@@ -224,7 +248,7 @@ def get_top(all_runs: dict, top_n: int, sort_criteria: OrderedDict):
     def sort_key(run):
         key = []
         for name, (_, order) in sort_criteria.items():
-            val = run[1][0][name]
+            val = run[1][0][name] if name in run[1][0] else run[1][1][name]
             val = val[0] if isinstance(val, tuple) else val
             key.append(val * (-1 if order == "desc" else 1))
         return tuple(key)
@@ -257,20 +281,32 @@ def process_sort_fields(  #  pylint: disable=C0330
 
 
 def elite() -> None:
-    welcome()
     args = parse_args()
-    exp_name, exp_path = get_latest_experiment(**args.__dict__)
+    result = get_latest_experiments(**args.__dict__)
 
-    print("Experiment", clr(exp_name, "yellow", attrs=["bold"]), "\n")
-
-    all_runs = collect_runs(
-        exp_path,
-        args.individual,
-        just_title=args.just_title,
-        filters=[tuple(cond.split("=")) for cond in args.filters],
-        get_all=args.get_all,
-        show_id=args.show_id,
-    )
+    if len(result) > 1:
+        print("Combining {len(result):d} experiments.")
+    for exp_name, exp_path in result:
+        print("\tExperiment", clr(exp_name, "yellow", attrs=["bold"]))
+        if args.filters:
+            filters = []
+            for cond in args.filters:
+                for operator in ["=", "<", ">"]:
+                    if operator in cond:
+                        key, value = cond.split(operator)
+                        filters.append((key, operator, value))
+                        break
+        else:
+            filters = None
+        all_runs = collect_runs(
+            exp_path,
+            args.individual,
+            just_title=args.just_title,
+            filters=filters,
+            get_all=args.get_all,
+            show_id=args.show_id,
+        )
+        print("")
     sort_criteria = process_sort_fields(args.sort_fields)
     if not args.individual:
         all_runs = aggregate(all_runs, sort_criteria)
@@ -324,3 +360,4 @@ def elite() -> None:
                 else:
                     info.append([key, val])
             print(tabulate(info))
+    welcome()

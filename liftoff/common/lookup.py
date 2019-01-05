@@ -1,14 +1,46 @@
+""" Here we define functions find experiment folders matching some search
+    criteria (e.g. name, timestamp).
+"""
+
+
+from typing import List, Tuple
 import os
 from datetime import datetime
 
 
-def get_latest_experiment(experiment: str = None,
-                          timestamp: str = None,
-                          timestamp_fmt: str = "%Y%b%d-%H%M%S",
-                          results_dir: str = "./results",
-                          strict_fmt: bool = False,
-                          **_kwargs) -> str:
+def get_latest_experiments(  # pylint: disable=bad-continuation
+    experiment: List[str] = None, timestamp: List[str] = None, **kwargs
+) -> List[Tuple[str, str]]:
+    """ Used when bringing together several experiments.
+    """
+    result = []
+    if experiment and timestamp:
+        if len(experiment) != len(timestamp):
+            raise ValueError("Experiment names & timestamps must match length")
+    elif experiment:
+        timestamp = [None] * len(experiment)
+    elif timestamp:
+        experiment = [None] * len(timestamp)
+    else:
+        timestamp, experiment = [None], [None]
+    for exp, tms in zip(experiment, timestamp):
+        name, path = get_latest_experiment(exp, tms, **kwargs)
+        result.append((name, path))
+    return result
 
+
+def get_latest_experiment(  # pylint: disable=bad-continuation
+    experiment: str = None,
+    timestamp: str = None,
+    timestamp_fmt: str = "%Y%b%d-%H%M%S",
+    results_dir: str = "./results",
+    strict_fmt: bool = False,
+    **_kwargs,
+) -> Tuple[str, str]:
+    """ This function returns the experiment with the given timestamp
+        (if provided), the latest experiment with the given name (if provided),
+        or the latest experiment in general.
+    """
     if "_" in timestamp_fmt:
         raise ValueError("Unsupported datetime format. No '_'s, please.")
 
@@ -34,8 +66,9 @@ def get_latest_experiment(experiment: str = None,
 
         if crt_timestamp is None:
             try:
-                t_fmt_path = os.path.join(results_dir, dirname.name,
-                                          ".__timestamp_fmt")
+                t_fmt_path = os.path.join(
+                    results_dir, dirname.name, ".__timestamp_fmt"
+                )
                 with open(t_fmt_path) as t_fmt_file:
                     crt_fmt = t_fmt_file.readline().strip()
                 crt_timestamp = datetime.strptime(crt_timestamp_str, crt_fmt)
@@ -54,9 +87,11 @@ def get_latest_experiment(experiment: str = None,
     return full_name, os.path.join(results_dir, full_name)
 
 
-def create_new_experiment_folder(experiment: str,
-                                 timestamp_fmt: str,
-                                 results_dir: str):
+def create_new_experiment_folder(  # pylint: disable=bad-continuation
+    experiment: str, timestamp_fmt: str, results_dir: str
+):
+    """ This function creates a new experiment folder.
+    """
     if "_" in timestamp_fmt:
         raise ValueError("Unsupported datetime format. No '_'s, please.")
 
