@@ -414,9 +414,9 @@ def ask_user(experiments: List[Experiment], to_kill: List[PID], args):
         .strip()
     )
 
-    if answer[0] == "y":
+    if answer and answer[0] == "y":
         return True
-    elif answer[0] == "n":
+    elif answer and answer[0] == "n":
         return False
     return ask_user(experiments, to_kill, args)
 
@@ -432,8 +432,8 @@ def kill_all(experiment: Experiment):
     # TODO: cross-check with active pids
     cmd = (
         f"for p in `pgrep -f '"
-        f"python -u.*\\-\\-id {experiment.timestamp:s}_{experiment.ppid:d}'`; "
-        + "do kill $p; done"
+        f"^python -u.*\\-\\-id {experiment.timestamp:s}_{experiment.ppid:d}'`; "
+        + "do kill `ps -o pid= --ppid $p` $p; done"
     )
 
     result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
