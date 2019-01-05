@@ -250,7 +250,10 @@ def get_top(all_runs: dict, top_n: int, sort_criteria: OrderedDict):
         for name, (_, order) in sort_criteria.items():
             val = run[1][0][name] if name in run[1][0] else run[1][1][name]
             val = val[0] if isinstance(val, tuple) else val
-            key.append(val * (-1 if order == "desc" else 1))
+            if isinstance(val, str):
+                key.append(val)
+            else:
+                key.append(val * (-1 if order == "desc" else 1))
         return tuple(key)
 
     srt = sorted(all_runs.items(), key=sort_key)
@@ -283,7 +286,7 @@ def process_sort_fields(  #  pylint: disable=C0330
 def elite() -> None:
     args = parse_args()
     result = get_latest_experiments(**args.__dict__)
-
+    all_runs = None
     if len(result) > 1:
         print("Combining {len(result):d} experiments.")
     for exp_name, exp_path in result:
@@ -305,6 +308,7 @@ def elite() -> None:
             filters=filters,
             get_all=args.get_all,
             show_id=args.show_id,
+            all_runs=all_runs,
         )
         print("")
     sort_criteria = process_sort_fields(args.sort_fields)
@@ -323,6 +327,8 @@ def elite() -> None:
             for key in details_keys:
                 vals.append(details.get(key, None))
             for key in sort_criteria.keys():
+                if key in details_keys:
+                    continue
                 val = summary.get(key, None)
                 if isinstance(val, tuple):
                     vals.extend(val)
@@ -338,10 +344,14 @@ def elite() -> None:
         header = []
         header.extend(details_keys)
         if args.individual:
-            header.extend(list(sort_criteria.keys()))
+            header.extend(
+                [k for k in sort_criteria.keys() if k not in details_keys]
+            )
             header.extend(summary_keys)
         else:
             for name in sort_criteria.keys():
+                if name in details_keys:
+                    continue
                 header.extend([name, ""])
             for name in summary_keys:
                 header.extend([name, ""])
