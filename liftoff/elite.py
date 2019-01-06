@@ -2,7 +2,6 @@
     reports info from their summaries.
 
     TODO: allow for multiple summaries for the same run (e.g. multiprocessing)
-    TODO: sort by info columns
 """
 
 from collections import OrderedDict
@@ -288,7 +287,7 @@ def elite() -> None:
     result = get_latest_experiments(**args.__dict__)
     all_runs = None
     if len(result) > 1:
-        print("Combining {len(result):d} experiments.")
+        print(f"Combining {len(result):d} experiments.")
     for exp_name, exp_path in result:
         print("\tExperiment", clr(exp_name, "yellow", attrs=["bold"]))
         if args.filters:
@@ -320,6 +319,8 @@ def elite() -> None:
         summary_keys = list(set(chain(*(r[1][0].keys() for r in runs))))
         details_keys = list(set(chain(*(r[1][1].keys() for r in runs))))
         summary_keys = [k for k in summary_keys if k not in sort_criteria]
+        summary_keys.sort()
+        details_keys.sort()
 
         table = []
         for _, (summary, details) in runs:
