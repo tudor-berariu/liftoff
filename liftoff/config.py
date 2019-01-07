@@ -99,6 +99,9 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
     Each of those files is combined with default exactly as above. A
     list of `Namespace`s is returned.
 
+    Additionally each config will be augmented with:
+        - the git commit hash and branch of the experiment being launched.
+        - the launch comment if one was provided.
     """
 
     args: Namespace = parse_args(strict=strict)
@@ -158,6 +161,11 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
             cfg.commit = f"{commit[1]:s}@{commit[0]}"
         else:
             cfg.commit = None
+
+        if hasattr(args, "comment"):
+            cfg.comment = args.comment
+        else:
+            cfg.comment = None
 
         cfgs.append(cfg)
 
