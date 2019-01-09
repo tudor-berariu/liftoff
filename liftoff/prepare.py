@@ -67,7 +67,7 @@ def check_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
             if clean:
                 os.remove(f_path)
             else:
-                assert False, f"Found this file: {f_path:s}."
+                raise RuntimeError(f"Found this file: {f_path:s}.")
 
     return exp_path, config_path
 

@@ -261,7 +261,7 @@ def run_from_system(root_path: str, timestamp: str,
     py_file = args.module
     py_file = py_file if py_file.endswith(".py") else py_file + ".py"
     if not os.path.isfile(py_file):
-        raise FileNotFoundError("Could not find {py_file:s}.")
+        raise FileNotFoundError(f"Could not find {py_file:s}.")
 
     exp_args = get_exp_args(cfgs, root_path, args.runs_no)
 
