@@ -1,5 +1,6 @@
+""" Liftoff utils related to retrieving the results of the experiments.
+"""
 import os
-import re
 import sys
 import zipfile
 from typing import Dict, List, Optional, Tuple, Union
@@ -7,7 +8,7 @@ from argparse import ArgumentParser, Namespace
 import yaml
 
 from .common.argparsers import add_experiment_lookup_args
-from .common.lookup import get_latest_experiment
+from .common.lookup import get_latest_experiment, get_experiments
 from .config import namespace_to_dict
 
 
@@ -151,29 +152,32 @@ def collect_results(timestamp: Optional[str] = None,
     return results
 
 
-def collect_all_results(timestamp: Optional[str] = None,
-                        experiment_name: Optional[str] = None,
+def collect_all_results(experiment_names: List[str],
                         conditions: Union[Namespace, dict] = None,
                         names: List[str] = None,
                         incomplete: bool = True,
                         results_dir: str = './results') -> List[
                             Tuple[str, List[str]]]:
+    """ Returns **all** the experiments, at all timestamps, for each of the
+        names in `experiment_names`.
     """
-    Returns the list of lists of paths for all requested experiments
-    in folder 'results/' with name that match `anything_chars`'
-    """
+
+    assert isinstance(
+        experiment_names, list
+    ), "Pass a list of experiment names."
 
     results = []
-
-    exp_dirs = [d for d in os.listdir(results_dir)
-                if os.path.isdir(os.path.join(results_dir, d))]
-
-    regex: str = f".+?(?=_)\w+"
-    exp_dirs = [f for f in exp_dirs if re.match(regex, f)]
+    exp_dirs = get_experiments(experiment_names, results_dir)
 
     for exp_dir in exp_dirs:
-        r = collect_results(timestamp, experiment_name, exp_dir,
-                            conditions, names, incomplete)
+        r = collect_results(
+            timestamp=None,
+            experiment_name=None,
+            experiment_full_name=exp_dir,
+            conditions=conditions,
+            names=names,
+            incomplete=incomplete,
+            results_dir=results_dir)
         if r:
             results.append(r)
 
