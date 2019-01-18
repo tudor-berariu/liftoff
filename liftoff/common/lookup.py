@@ -8,6 +8,29 @@ import os
 from datetime import datetime
 
 
+def get_experiments(experiment_names: List[str], results_dir: str) -> List[str]:
+    """ Receives a list of experiment names and returns tuples of
+        (timestamp_name, experiment_path).
+
+    Args:
+        experiment_names (List[str]): List of experiments.
+        results_dir (str): Parent dir of experiments.
+
+    Returns:
+        List[Tuple[str, str]]: List of tuples, see above.
+    """
+    assert isinstance(
+        experiment_names, list
+    ), "Pass a list of experiment names."
+    results = []
+    all_experiments = filter(lambda f: f.is_dir(), os.scandir(results_dir))
+    for exp_name in all_experiments:
+        for looked_for in experiment_names:
+            if looked_for in exp_name.name:
+                results.append(exp_name.name)
+    return results
+
+
 def get_latest_experiments(  # pylint: disable=bad-continuation
     experiment: List[str] = None, timestamp: List[str] = None, **kwargs
 ) -> List[Tuple[str, str]]:
