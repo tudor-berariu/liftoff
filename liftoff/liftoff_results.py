@@ -173,7 +173,7 @@ def collect_all_results(timestamp: Optional[str] = None,
 
     for exp_dir in exp_dirs:
         r = collect_results(timestamp, experiment_name, exp_dir,
-                            conditions, names, incomplete)
+                            conditions, names, incomplete, results_dir)
         if r:
             results.append(r)
 
