@@ -25,7 +25,7 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         specific to liftoff-elite.
     """
     arg_parser.add_argument(
-        "-n",
+        "--top",
         type=int,
         dest="top_n",
         default=0,
@@ -85,7 +85,20 @@ def add_reporting_args(arg_parser: ArgumentParser) -> None:
         action="store_true",
         help="Add a column with the id of each experiment.",
     )
-
+    arg_parser.add_argument(
+        "-n",
+        "--name",
+        dest="name",
+        default=None,
+        help="Name of summary file to be collected."
+    )
+    arg_parser.add_argument(
+        "--detailed",
+        dest="detailed",
+        default=False,
+        action="store_true",
+        help="Show less important columns.",
+    )
 
 def parse_args() -> Namespace:
     """ This function builds the ArgumentParser and then parses the command
@@ -97,20 +110,27 @@ def parse_args() -> Namespace:
     return arg_parser.parse_args()
 
 
-def get_run_summary(run_path: str) -> dict:
-    summary_path = os.path.join(run_path, "summary.pkl")
-    if os.path.isfile(summary_path):
-        with open(summary_path, "rb") as handler:
-            summary = pickle.load(handler)
-        return summary
-
-    fitness_path = os.path.join(run_path, "fitness")
-    if os.path.isfile(fitness_path):
-        with open(fitness_path, "r") as handler:
-            fitness = float(handler.readline().strip())
-        return {"fitness": fitness}
+def get_run_summary(run_path: str, name: str = None, detailed=False) -> dict:
+    if name is not None:
+        summary_path = os.path.join(run_path, f"{name:s}_summary.pkl")
+        if os.path.isfile(summary_path):
+            with open(summary_path, "rb") as handler:
+                summary = pickle.load(handler)
+            return summary
+    else:
+        full_summary = dict({})
+        for file in os.scandir(run_path):
+            if file.is_file() and file.name.endswith("_summary.pkl"):
+                summary_path = os.path.join(run_path, file.name)
+                with open(summary_path, "rb") as handler:
+                    summary = pickle.load(handler)
+                for key, value in summary.items():
+                    if not key.startswith("_") or detailed:
+                        full_summary[key] = value
+        return full_summary
 
     return dict({})
+            
 
 
 def deduce_experiment_id(run_path: str) -> int:
@@ -181,12 +201,14 @@ def collect_runs(  # pylint: disable=bad-continuation
     get_all: bool = False,
     show_id: bool = False,
     all_runs: dict = None,
+    name: str = None,
+    detailed: bool = False
 ) -> dict:
     if all_runs is None:
         all_runs = dict({})  # type: Dict[str, Any]
     for run_path, _, files in os.walk(exp_path):
         if ".__leaf" in files:
-            summary = get_run_summary(run_path)
+            summary = get_run_summary(run_path, name, detailed=detailed)
 
             if (not summary) and (not get_all):
                 continue
@@ -308,6 +330,8 @@ def elite() -> None:
             get_all=args.get_all,
             show_id=args.show_id,
             all_runs=all_runs,
+            name=args.name,
+            detailed=args.detailed
         )
         print("")
     sort_criteria = process_sort_fields(args.sort_fields)
