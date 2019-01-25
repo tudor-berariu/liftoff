@@ -117,6 +117,10 @@ def get_run_summary(run_path: str, name: str = None, detailed=False) -> dict:
             with open(summary_path, "rb") as handler:
                 summary = pickle.load(handler)
             return summary
+    elif os.path.isfile(os.path.join(run_path, "summary.pkl")):
+        with open(os.path.join(run_path, "summary.pkl"), "rb") as handler:
+            summary = pickle.load(handler)
+        return summary
     else:
         full_summary = dict({})
         for file in os.scandir(run_path):
