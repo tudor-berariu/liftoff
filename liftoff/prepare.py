@@ -89,6 +89,12 @@ def get_variables(config_data: dict) -> Tuple[Variables, Domains, BadPairs]:
     else:
         filter_out = []
 
+    if "constraints" in config_data:
+        constraints = config_data["constraints"]
+        del config_data["constraints"]
+    else:
+        constraints = []
+
     queue: List[Tuple[Union[list, dict], VarPath]] = [(config_data, [])]
 
     var_id: VarId = 0
@@ -121,16 +127,31 @@ def get_variables(config_data: dict) -> Tuple[Variables, Domains, BadPairs]:
         assert all(x in domains[var1_id] for (x, _) in pairs)
         assert all(y in domains[var2_id] for (_, y) in pairs)
 
-        assert (var1_id, var2_id) not in filter_out
-        assert (var1_id, var2_id) not in filter_out
-
         bad_pairs[(var1_id, var2_id)] = pairs
 
         p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
         v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
         print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
 
-    return variables, domains, bad_pairs
+    mandatory_pairs: BadPairs = {}
+    for constraint in constraints:
+        vp1: VarPath = to_var_path(constraint["left"])
+        vp2: VarPath = to_var_path(constraint["right"])
+        pairs: List[Tuple[Any, Any]] = list(map(tuple, constraint["constrain"]))
+
+        [var1_id] = [k for (k, v) in variables.items() if v[-len(vp1) :] == vp1]
+        [var2_id] = [k for (k, v) in variables.items() if v[-len(vp2) :] == vp2]
+
+        assert all(x in domains[var1_id] for (x, _) in pairs)
+        assert all(y in domains[var2_id] for (_, y) in pairs)
+
+        mandatory_pairs[(var1_id, var2_id)] = pairs
+
+        p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
+        v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
+        print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
+
+    return variables, domains, bad_pairs, mandatory_pairs
 
 
 def get_names(variables: Variables) -> Dict[VarId, str]:
@@ -152,16 +173,22 @@ def get_names(variables: Variables) -> Dict[VarId, str]:
     return names
 
 
-def check_assignment(bad_pairs: BadPairs, assignment: Assignment) -> bool:
+def check_assignment(bad_pairs: BadPairs, mandatory_pairs: BadPairs, assignment: Assignment) -> bool:
     for (var1, var2), bad_values in bad_pairs.items():
         if (assignment[var1], assignment[var2]) in bad_values:
             return False
+    for (var1, var2), mandatory_values in mandatory_pairs.items():
+        for (val1, val2) in mandatory_values:
+            if assignment[var1] == val1 and assignment[var2] != val2:
+                return False
+            elif assignment[var1] != val1 and assignment[var2] == val2:
+                return False
     return True
 
 
-def prod_domains(domains: Domains, bad_pairs: BadPairs) -> Iterable[Assignment]:
+def prod_domains(domains: Domains, bad_pairs: BadPairs, mandatory_pairs: BadPairs) -> Iterable[Assignment]:
     return filter(
-        partial(check_assignment, bad_pairs),
+        partial(check_assignment, bad_pairs, mandatory_pairs),
         map(
             lambda a: {k: v for (k, v) in zip(domains.keys(), a)},
             product(*domains.values()),
@@ -206,7 +233,7 @@ def main():
 
     # BFS to get all variables
 
-    variables, domains, bad_pairs = get_variables(config_data)
+    variables, domains, bad_pairs, mandatory_pairs = get_variables(config_data)
     names = get_names(variables)
 
     for var_id, name in names.items():
@@ -216,7 +243,7 @@ def main():
         )
 
     num = 0
-    for idx, values in enumerate(prod_domains(domains, bad_pairs)):
+    for idx, values in enumerate(prod_domains(domains, bad_pairs, mandatory_pairs)):
         crt_values = combine_values(variables, values, names)
         crt_values["_experiment_parameters"] = {
             names[var_id]: value for var_id, value in values.items()
