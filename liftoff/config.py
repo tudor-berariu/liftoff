@@ -39,6 +39,8 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
     """Updates @default_cfg with values from @diff_cfg"""
 
     for key, value in diff_cfg.__dict__.items():
+        if value == "delete" and key in default_cfg:
+            del default_cfg["key"]
         if key.startswith("_"):
             # Keys starting with '_' are entirely overwritten
             setattr(default_cfg, key, value)
