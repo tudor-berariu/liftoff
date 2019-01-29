@@ -149,7 +149,7 @@ def get_variables(config_data: dict) -> Tuple[Variables, Domains, BadPairs]:
 
         p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
         v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
-        print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
+        print(f"Will constrain {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
 
     return variables, domains, bad_pairs, mandatory_pairs
 
