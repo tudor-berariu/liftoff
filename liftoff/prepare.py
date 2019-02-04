@@ -281,6 +281,7 @@ def main():
         crt_values["_experiment_parameters"] = {
             names[var_id]: value for var_id, value in values.items()
         }
+        crt_values["cfg_id"] = idx
         file_path = os.path.join(exp_path, f"{experiment:s}_{idx:d}.yaml")
         with open(file_path, "w") as yaml_file:
             yaml.safe_dump(crt_values, yaml_file, default_flow_style=False)
