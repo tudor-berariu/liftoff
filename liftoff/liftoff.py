@@ -3,6 +3,7 @@ from typing import Callable, List, Optional
 from copy import deepcopy
 import sys
 import os
+import shutil
 from functools import partial
 from importlib import import_module
 import multiprocessing
@@ -32,8 +33,9 @@ def parse_args() -> Namespace:
     return arg_parser.parse_args()
 
 
-def get_exp_args(cfgs: List[Namespace], root_path: str,
-                 runs_no: int) -> List[Namespace]:
+def get_exp_args(
+    cfgs: List[Namespace], root_path: str, runs_no: int
+) -> List[Namespace]:
     """Takes the configs read from files and augments them with
     out_dir, and run_id"""
 
@@ -45,8 +47,20 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
         while "___" in title:
             title = title.replace("___", "__")
 
-        alg_path = os.path.join(root_path, f"{j:d}_{title:s}")
+        cfg_id = cfg.cfg_id if hasattr(cfg, "cfg_id") else j
+
+        alg_dir = f"{cfg_id:d}_{title:s}"
+        alg_path = os.path.join(root_path, alg_dir)
+
+        for f in os.scandir(root_path):
+            # A previous bad assignment
+            if f.is_dir() and f.name.endswith(title) and f.name != alg_dir:
+                assert not os.path.exists(alg_path)
+                shutil.move(os.path.join(root_path, f.name), alg_path)
+                print("moving")
+
         if not os.path.isdir(alg_path):
+            print("not found", alg_path)
             os.makedirs(alg_path, exist_ok=True)
 
         if runs_no > 1:
@@ -55,8 +69,10 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
                 if os.path.isdir(exp_path):
                     end_file = os.path.join(exp_path, ".__end")
                     if os.path.isfile(end_file):
-                        print(f"Skipping {cfg.title:s} <{run_id:d}>. "
-                              f"{end_file:s} exists.")
+                        print(
+                            f"Skipping {cfg.title:s} <{run_id:d}>. "
+                            f"{end_file:s} exists."
+                        )
                         continue
                 else:
                     os.makedirs(exp_path)
@@ -72,8 +88,11 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
                 open(os.path.join(exp_path, ".__leaf"), "a").close()
                 cfg_file = os.path.join(exp_path, "cfg.yaml")
                 with open(cfg_file, "w") as yaml_file:
-                    yaml.safe_dump(namespace_to_dict(new_cfg), yaml_file,
-                                   default_flow_style=False)
+                    yaml.safe_dump(
+                        namespace_to_dict(new_cfg),
+                        yaml_file,
+                        default_flow_style=False,
+                    )
 
         else:
             # if there's a single run, no individual folders are created
@@ -93,8 +112,11 @@ def get_exp_args(cfgs: List[Namespace], root_path: str,
                 open(os.path.join(alg_path, ".__leaf"), "a").close()
                 cfg_file = os.path.join(alg_path, "cfg.yaml")
                 with open(cfg_file, "w") as yaml_file:
-                    yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
-                                   default_flow_style=False)
+                    yaml.safe_dump(
+                        namespace_to_dict(cfg),
+                        yaml_file,
+                        default_flow_style=False,
+                    )
     shuffle(exp_args)
     return exp_args
 
@@ -169,6 +191,7 @@ def spawn_from_here(root_path: str, cfgs: List[Namespace], args: Namespace):
 # --------------------------------------------
 # Start and detach experiments using nohup
 
+
 def get_max_procs(args: Namespace) -> int:
     """Limit the number of processes by either CPU usage or GPU usage"""
     if args.gpus:
@@ -176,46 +199,49 @@ def get_max_procs(args: Namespace) -> int:
     return args.procs_no
 
 
-def launch(py_file: str,
-           exp_args: Namespace,
-           timestamp: str,
-           ppid: int,
-           root_path: str,
-           gpu: Optional[int] = None) -> int:
+def launch(
+    py_file: str,
+    exp_args: Namespace,
+    timestamp: str,
+    ppid: int,
+    root_path: str,
+    gpu: Optional[int] = None,
+) -> int:
 
     err_path = os.path.join(exp_args.out_dir, "err")
     out_path = os.path.join(exp_args.out_dir, "out")
 
-    start_path = os.path.join(exp_args.out_dir, '.__start')
-    end_path = os.path.join(exp_args.out_dir, '.__end')
-    crash_path = os.path.join(exp_args.out_dir, '.__crash')
+    start_path = os.path.join(exp_args.out_dir, ".__start")
+    end_path = os.path.join(exp_args.out_dir, ".__end")
+    crash_path = os.path.join(exp_args.out_dir, ".__crash")
 
     env_vars = ""
 
     if gpu is not None:
         env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
 
-    cmd = f" date +%s 1> {start_path:s} 2>/dev/null &&" +\
-          f" nohup sh -c '{env_vars:s} python -u {py_file:s}" +\
-          f" --configs-dir {exp_args.cfg_dir:s}" +\
-          f" --config-file cfg" +\
-          f" --default-config-file cfg" +\
-          f" --out-dir {exp_args.out_dir:s}" +\
-          f" --id {timestamp:s}_{ppid:d}" +\
-          f" 2>{err_path:s} 1>{out_path:s}" +\
-          f" && date +%s > {end_path:s}" +\
-          f" || date +%s > {crash_path:s}'" +\
-          f" 1> {os.path.join(root_path, 'nohup_out')}" +\
-          f" 2> {os.path.join(root_path, 'nohup_err')}" +\
-          f" & echo $!"
+    cmd = (
+        f" date +%s 1> {start_path:s} 2>/dev/null &&"
+        + f" nohup sh -c '{env_vars:s} python -u {py_file:s}"
+        + f" --configs-dir {exp_args.cfg_dir:s}"
+        + f" --config-file cfg"
+        + f" --default-config-file cfg"
+        + f" --out-dir {exp_args.out_dir:s}"
+        + f" --id {timestamp:s}_{ppid:d}"
+        + f" 2>{err_path:s} 1>{out_path:s}"
+        + f" && date +%s > {end_path:s}"
+        + f" || date +%s > {crash_path:s}'"
+        + f" 1> {os.path.join(root_path, 'nohup_out')}"
+        + f" 2> {os.path.join(root_path, 'nohup_err')}"
+        + f" & echo $!"
+    )
     # f" & ps --ppid $! -o pid h"
 
     print(f"Command to be run:\n{cmd:s}")
 
-    proc = subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE,
-                            shell=True)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+    )
     (out, err) = proc.communicate()
     err = err.decode("utf-8").strip()
     if err:
@@ -227,9 +253,9 @@ def launch(py_file: str,
 
 
 def get_command(pid: int) -> str:
-    result = subprocess.run(f"ps -p {pid:d} -o cmd h",
-                            stdout=subprocess.PIPE,
-                            shell=True)
+    result = subprocess.run(
+        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
+    )
     return result.stdout.decode("utf-8").strip()
 
 
@@ -247,14 +273,16 @@ def dump_pids(path, pids):
             file_handler.write(f"{pid:d}\n")
 
 
-def run_from_system(root_path: str, timestamp: str,
-                    cfgs: List[Namespace], args: Namespace) -> None:
+def run_from_system(
+    root_path: str, timestamp: str, cfgs: List[Namespace], args: Namespace
+) -> None:
     active_procs = []  # type: : List[Tuple[int, Optional[int]]]
     max_procs_no = get_max_procs(args)
     crt_pid = os.getpid()
     print(f"PID of current process is {crt_pid:d}.")
-    print("The maximum number of experiments in parallel will be: ",
-          max_procs_no)
+    print(
+        "The maximum number of experiments in parallel will be: ", max_procs_no
+    )
 
     gpus = args.gpus
     epg = args.per_gpu
@@ -273,8 +301,9 @@ def run_from_system(root_path: str, timestamp: str,
                     gpu = gpu_j
                     break
             next_args = exp_args.pop()
-            new_pid = launch(py_file, next_args, timestamp, crt_pid, root_path,
-                             gpu=gpu)
+            new_pid = launch(
+                py_file, next_args, timestamp, crt_pid, root_path, gpu=gpu
+            )
             active_procs.append((new_pid, gpu))
             dump_pids(root_path, [pid for (pid, _) in active_procs])
         else:
@@ -306,9 +335,11 @@ def run_from_system(root_path: str, timestamp: str,
                 print(f"Process {pid:d} seems to be done.")
         if changed and active_procs:
             dump_pids(root_path, [pid for (pid, _) in active_procs])
-            print("Still active: " +
-                  ",".join([str(pid) for (pid, _) in active_procs]) +
-                  ". Stop this at any time with no risks.")
+            print(
+                "Still active: "
+                + ",".join([str(pid) for (pid, _) in active_procs])
+                + ". Stop this at any time with no risks."
+            )
 
     print(clr("All done!", attrs=["bold"]))
 
@@ -328,8 +359,10 @@ def args_from_liftoff_config(args: Namespace) -> None:
         if lft_cfg is not None:
             asked = lft_cfg.get("history", {}).get(flag_name, False)
         if not asked:
-            question = f"Do you want to save {args.module:s} as the " + \
-                "default script for this project?"
+            question = (
+                f"Do you want to save {args.module:s} as the "
+                + "default script for this project?"
+            )
             new_options = {"history": {flag_name: True}}
             try:
                 if ask_user_yn(question):
@@ -342,7 +375,7 @@ def args_from_liftoff_config(args: Namespace) -> None:
 def create_symlink(experiment_path: str):
     src = os.path.normpath(experiment_path)
     dst = os.path.join(os.path.dirname(src), "latest")
-    #src = os.path.abspath(src)
+    # src = os.path.abspath(src)
     dst = os.path.abspath(dst)
     if os.path.islink(dst):
         os.unlink(dst)
@@ -366,14 +399,17 @@ def main():
 
     if args.resume:
         # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
-        full_name, experiment_path = get_latest_experiment(cfg0.experiment,
-                                                           args.timestamp,
-                                                           args.timestamp_fmt,
-                                                           args.results_dir)
+        full_name, experiment_path = get_latest_experiment(
+            cfg0.experiment,
+            args.timestamp,
+            args.timestamp_fmt,
+            args.results_dir,
+        )
     else:
         # -------------------- STARTING A NEW EXPERIMENT --------------------
         full_name, experiment_path = create_new_experiment_folder(
-            cfg0.experiment, args.timestamp_fmt, args.results_dir)
+            cfg0.experiment, args.timestamp_fmt, args.results_dir
+        )
 
     create_symlink(experiment_path)
 
@@ -406,8 +442,9 @@ def main():
         cfg_file = os.path.join(experiment_path, "cfg.yaml")
         if not os.path.isfile(cfg_file):
             with open(cfg_file, "w") as yaml_file:
-                yaml.safe_dump(namespace_to_dict(cfg), yaml_file,
-                               default_flow_style=False)
+                yaml.safe_dump(
+                    namespace_to_dict(cfg), yaml_file, default_flow_style=False
+                )
         open(os.path.join(experiment_path, ".__leaf"), "a").close()
         cfg.out_dir, cfg.run_id = experiment_path, 0
         get_function(args)(cfg)

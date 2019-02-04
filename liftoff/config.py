@@ -8,6 +8,7 @@ from termcolor import colored as clr
 from .common.argparsers import add_experiment_args
 from .version import get_branch_commit
 
+
 def namespace_to_dict(namespace: Namespace) -> dict:
     """Deep (recursive) transform from Namespace to dict"""
     dct: dict = {}
@@ -53,13 +54,14 @@ def _update_config(default_cfg: Namespace, diff_cfg: Namespace):
             setattr(default_cfg, key, value)
 
 
-def config_to_string(cfg: Namespace, indent: int = 0,
-                     color: bool = True) -> str:
+def config_to_string(
+    cfg: Namespace, indent: int = 0, color: bool = True
+) -> str:
     """Creates a multi-line string with the contents of @cfg."""
 
     text = ""
     for key, value in cfg.__dict__.items():
-        ckey = clr(key, "yellow", attrs=['bold']) if color else key
+        ckey = clr(key, "yellow", attrs=["bold"]) if color else key
         text += " " * indent + ckey + ": "
         if isinstance(value, Namespace):
             text += "\n" + config_to_string(value, indent + 2, color=color)
@@ -116,9 +118,11 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
 
     if args.experiment:
         path = os.path.join(args.configs_dir, args.experiment)
-        config_files = [f for f in listdir(path)
-                        if f.startswith(args.experiment + "_")
-                        and f.endswith(".yaml")]
+        config_files = [
+            f
+            for f in listdir(path)
+            if f.startswith(args.experiment + "_") and f.endswith(".yaml")
+        ]
         default_config_file = "default.yaml"
         print(f"Found {len(config_files):d} configs in current experiment!")
     else:
@@ -159,6 +163,12 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
         if hasattr(args, "out_dir"):
             cfg.out_dir = args.out_dir
 
+        if not hasattr(cfg, "cfg_id"):
+            try:
+                cfg.cfg_id = int(config_file[:-5].split("_")[-1])
+            except Exception as e:
+                pass
+
         if commit:
             cfg.commit = f"{commit[1]:s}@{commit[0]}"
         else:
@@ -171,8 +181,9 @@ def read_config(strict: bool = False) -> Union[Namespace, List[Namespace]]:
 
         cfgs.append(cfg)
 
-        if value_of(cfg, 'verbose', 0) > 0:
+        if value_of(cfg, "verbose", 0) > 0:
             import sys
+
             sys.stdout.write(f"{clr('[Config]', 'red'):s} ")
             if default_config_file and default_config_file != config_file:
                 print(f"Read {config_file:s} over {default_config_file:s}.")
