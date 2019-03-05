@@ -19,7 +19,6 @@ setup(name='liftoff',
       author='Tudor Berariu',
       author_email='tudor.berariu@gmail.com',
       license='MIT',
-      packages=['liftoff'],
       install_requires=[
           'gitpython',
           'pyyaml',
