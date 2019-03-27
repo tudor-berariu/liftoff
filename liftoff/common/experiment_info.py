@@ -45,6 +45,8 @@ def get_experiment_paths(  # pylint: disable=bad-continuation
         latest_timestamp, latest_experiment_path = None, None
     else:
         experiment_paths = []
+    if not os.path.isdir(results_path):
+        return []
     with os.scandir(results_path) as fit:
         for entry in fit:
             if is_experiment(entry.path) and experiment in entry.name:

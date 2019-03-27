@@ -2,9 +2,11 @@
 """
 
 from argparse import Namespace
+from collections import OrderedDict
 import os.path
 from typing import List
 from tabulate import tabulate
+from termcolor import colored as clr
 from .common.experiment_info import get_experiment_paths
 from .common.options_parser import OptionParser
 
@@ -22,18 +24,18 @@ def parse_options() -> Namespace:
 def experiment_status(experiment_path):
     """ Gets full info about about an experiment.
     """
-    counts = {
+    counts = OrderedDict({
         ".__leaf": 0,
         ".__start": 0,
         ".__end": 0,
         ".__crash": 0,
         ".__lock": 0,
-    }
+    })
     names = {
         ".__leaf": "Total",
         ".__start": "Started",
-        ".__end": "Success",
-        ".__crash": "Crashed",
+        ".__end": "Done",
+        ".__crash": "Dead",
         ".__lock": "Locked",
     }
     with os.scandir(experiment_path) as fit:
@@ -48,9 +50,13 @@ def experiment_status(experiment_path):
                         for entry3 in fit3:
                             if entry3.name in counts:
                                 counts[entry3.name] += 1
-    info = {"Experiment": os.path.basename(experiment_path)}
+    info = OrderedDict({"Experiment": os.path.basename(experiment_path)})
     for key, value in counts.items():
         info[names[key]] = value
+    progress = (info['Done'] + info['Dead']) * 100.0 / info['Total']
+    info['Dead'] = clr(f"{info['Dead']:d}", color="red")
+    info['Done'] = clr(f"{info['Done']:d}", color="green", attrs=["bold"])
+    info["Progress"] = clr(f"{progress:.2f}%", attrs=['bold'])
     return info
 
 
@@ -70,4 +76,9 @@ def status() -> None:
         opts.timestamp_fmt,
         latest=(not opts.all),
     )
-    display_experiments([experiment_status(p) for p in experiment_paths])
+    display_experiments(
+        sorted(
+            [experiment_status(p) for p in experiment_paths],
+            key=lambda info: info["Experiment"],
+        )
+    )

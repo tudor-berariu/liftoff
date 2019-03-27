@@ -48,7 +48,7 @@ class OptionParser:
 
     def _add_all(self) -> None:
         self.arg_parser.add_argument(
-            "--all",
+            "-a", "--all",
             action="store_true",
             dest="all",
             help="Target all experiments not just the latest.",
