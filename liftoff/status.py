@@ -55,7 +55,7 @@ def experiment_status(experiment_path):
         info[names[key]] = value
     progress = (info['Done'] + info['Dead']) * 100.0 / info['Total']
     info['Dead'] = clr(f"{info['Dead']:d}", color="red")
-    info['Done'] = clr(f"{info['Done']:d}", color="green", attrs=["bold"])
+    info['Done'] = clr(f"{info['Done']:d}", color="green")
     info["Progress"] = clr(f"{progress:.2f}%", attrs=['bold'])
     return info
 
