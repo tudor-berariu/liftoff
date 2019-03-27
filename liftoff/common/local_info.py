@@ -2,6 +2,8 @@
     in the hello message.
 """
 
+import os.path
+import git
 from termcolor import colored as clr
 
 
@@ -9,16 +11,25 @@ def version():
     return "0.3"
 
 
+def get_branch_commit(path: str):
+    try:
+        repo = git.Repo(path=path, search_parent_directories=True)
+        return (repo.active_branch.name, repo.head.object.hexsha[-7:])
+    except git.InvalidGitRepositoryError:
+        return None
+
+
+def get_commit_suffix(path: str):
+    branch_commit = get_branch_commit(path)
+    if branch_commit:
+        return ":" + branch_commit[0] + ":" + branch_commit[1]
+    else:
+        return ""
+
+
 def project_repo():
-    """ TODO
-    """
-    return ""
+    return os.path.basename(os.path.abspath(os.curdir)) + get_commit_suffix(".")
 
 
 def hello():
-    print(
-        clr(
-            f"Liftoff {version():s} @ {project_repo():s}",
-            attrs=["bold"],
-        )
-    )
+    print(clr(f"Liftoff {version():s} @ {project_repo():s}", attrs=["bold"]))
