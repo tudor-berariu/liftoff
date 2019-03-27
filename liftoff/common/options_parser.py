@@ -25,15 +25,15 @@ class OptionParser:
         for arg in self.arguments:
             getattr(self, f"_add_{arg:s}")()
 
-    def parse_args(self, strict: bool = True) -> Namespace:
+    def parse_args(self, args: List[str] = None, strict: bool = True) -> Namespace:
         """ Parses command-line arguments and completes options with values
             from liftoff configuration files.
         """
 
         if strict:
-            opts = self.arg_parser.parse_args()
+            opts = self.arg_parser.parse_args(args=args)
         else:
-            opts = self.arg_parser.parse_known_args()
+            opts = self.arg_parser.parse_known_args(args=args)
 
         for arg in self.arguments:
             if not hasattr(opts, arg) or getattr(opts, arg) is None:

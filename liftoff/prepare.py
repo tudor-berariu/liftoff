@@ -26,6 +26,7 @@ from copy import copy, deepcopy
 import itertools
 import os.path
 import string
+from typing import List
 import pyperclip
 from termcolor import colored as clr
 import yaml
@@ -44,7 +45,7 @@ def safe_file_name(title: str):
     return "".join(map(lambda c: c if c in VALID_CHARS else "_", title))
 
 
-def parse_options(strict: bool = True) -> Namespace:
+def parse_options(args: List[str] = None, strict: bool = True) -> Namespace:
     """ Parse command line arguments and liftoff configuration.
     """
 
@@ -60,11 +61,11 @@ def parse_options(strict: bool = True) -> Namespace:
             "do",
             "overwrite",
             "verbose",
-            "copy_to_clipboard"
+            "copy_to_clipboard",
         ],
     )
 
-    return opt_parser.parse_args(strict=strict)
+    return opt_parser.parse_args(args=args, strict=strict)
 
 
 def idxs_of_duplicates(lst):
@@ -147,7 +148,7 @@ def check(values, constraints):
     return True
 
 
-def generate_combinations(cfg, opts):
+def generate_combinations(cfg, _opts):
     """ This is actually the function we wrote the whole script for.
     """
 
@@ -290,7 +291,8 @@ def prepare_multiple_subexperiments(opts):
 
 
 def prepare_experiment(opts):
-
+    """ This function does all the work.
+    """
     total_se, new_se, existing_se = 0, 0, 0
     total_runs, new_runs, existing_runs = 0, 0, 0
     written_runs = 0
@@ -460,15 +462,12 @@ def prepare_experiment(opts):
 
         return None
 
-    print(
-        "\nExperiment configured in", clr(experiment_path, attrs=["bold"])
-    )
+    print("\nExperiment configured in", clr(experiment_path, attrs=["bold"]))
     if opts.copy_to_clipboard:
         pyperclip.copy(experiment_path)
         print("Experiment path copied to clipboard.")
 
     return experiment_path
-
 
 
 def prepare(strict: bool = True) -> None:

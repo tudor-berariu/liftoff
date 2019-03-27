@@ -4,6 +4,22 @@
 
 from datetime import datetime
 import os.path
+import yaml
+
+
+def is_yaml(path: str) -> bool:
+    """ Checks if path points to a config file.
+    """
+    if not os.path.isfile(path):
+        return False
+
+    try:
+        with open(path) as handler:
+            yaml.load(handler, Loader=yaml.SafeLoader)
+    except yaml.ScannerError:
+        return False
+
+    return True
 
 
 def is_experiment(path: str) -> bool:

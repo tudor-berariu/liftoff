@@ -48,7 +48,7 @@ def experiment_status(experiment_path):
                         for entry3 in fit3:
                             if entry3.name in counts:
                                 counts[entry3.name] += 1
-    info = {"Experiment": experiment_path}
+    info = {"Experiment": os.path.basename(experiment_path)}
     for key, value in counts.items():
         info[names[key]] = value
     return info

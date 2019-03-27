@@ -20,6 +20,9 @@ def parse_options() -> Namespace:
 
 
 def get_running_liftoffs(experiment: str, results_path: str):
+    """ Get the running liftoff processes.
+    """
+
     cmd = (
         "COLUMNS=0 pgrep liftoff"
         " | xargs -r -n 1 grep "
@@ -47,7 +50,7 @@ def get_running_liftoffs(experiment: str, results_path: str):
         proc_group = dict({})
         session_id = os.path.basename(session_path)[3:]
 
-        escaped_sid = session_id.replace("-", "\-")
+        escaped_sid = session_id.replace("-", r"\-")
         cmd = (
             f"for p in "
             f"`pgrep -f '\\-\\-session\\-id {escaped_sid:s}'`"
@@ -95,7 +98,9 @@ def display_procs(running):
     for experiment_name, details in running.items():
         print(clr(experiment_name, attrs=["bold"]))
         for info in details:
-            nrunning = clr(f"{len(info['procs']):d}", color="blue", attrs=["bold"])
+            nrunning = clr(
+                f"{len(info['procs']):d}", color="blue", attrs=["bold"]
+            )
             ppid = clr(f"{info['ppid']:5d}", color="red", attrs=["bold"])
             print(
                 f"   {ppid:s}"

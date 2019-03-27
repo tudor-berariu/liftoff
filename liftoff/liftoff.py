@@ -2,15 +2,20 @@
 """
 
 from argparse import Namespace
+from functools import partial
+from importlib import import_module
 import os
 import os.path
 import subprocess
+import sys
 import time
-from typing import List
+import traceback
+from typing import Callable, List
 from termcolor import colored as clr
 import yaml
 
-from .common.experiment_info import is_experiment
+from .common.dict_utils import dict_to_namespace
+from .common.experiment_info import is_experiment, is_yaml
 from .common.options_parser import OptionParser
 
 
@@ -105,15 +110,15 @@ def parse_options() -> Namespace:
     """
 
     opt_parser = OptionParser(
-        "liftoff-prepare",
+        "liftoff",
         [
             "script",
             "config_path",
             "procs_no",
             "gpus",
             "per_gpu",
-            "do",
             "verbose",
+            "copy_to_clipboard"
         ],
     )
     return opt_parser.parse_args()
@@ -250,6 +255,81 @@ def launch_experiment(opts):
     print(clr(f"Experiment {opts.experiment_path} ended.", attrs=["bold"]))
     os.remove(pid_path)
 
+
+def systime_to(timestamp_file_path: str) -> None:
+    """ Write current system time to a file.
+    """
+    cmd = f"date +%s 1> {timestamp_file_path:s}"
+    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, shell=True)
+    (_, err) = proc.communicate()
+    return err.decode("utf-8").strip()
+
+
+def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
+    """ Wrapper around function to be called that also writes info files.
+    """
+    start_path = os.path.join(args.out_dir, ".__start")
+    end_path = os.path.join(args.out_dir, ".__end")
+    crash_path = os.path.join(args.out_dir, ".__crash")
+    lock_path = os.path.join(args.out_dir, ".__lock")
+
+    if lock_file(lock_path, ""):
+        try:
+            systime_to(start_path)
+            function(args)
+            systime_to(end_path)
+        except Exception:  # pylint: disable=broad-except
+            traceback.print_exc(file=sys.stderr)
+            systime_to(crash_path)
+        finally:
+            os.remove(lock_path)
+
+
+def get_function(opts: Namespace) -> Callable[[Namespace], None]:
+    """ Loads the script and calls run(opts)
+    """
+    sys.path.append(os.getcwd())
+    module_name = opts.script
+    if module_name.endswith(".py"):
+        module_name = module_name[:-3]
+        function = "run"
+    else:
+        module_name, function = module_name.split(".")
+
+    module = import_module(module_name)
+    if function not in module.__dict__:
+        raise Exception(f"Module must have function {function}(args).")
+    return partial(wrapper, module.__dict__[function])
+
+
+def run_here(opts):
+    from .prepare import parse_options as prepare_parse_options
+    from .prepare import prepare_experiment
+    prep_args = [opts.config_path, "--do"]
+    if opts.copy_to_clipboard:
+        prep_args.append("--cc")
+    prepare_opts = prepare_parse_options(prep_args)
+    opts.experiment_path = prepare_experiment(prepare_opts)
+
+    with os.scandir(opts.experiment_path) as fit:
+        for entry in fit:
+            if entry.name.startswith(".") or not entry.is_dir():
+                continue
+            with os.scandir(entry.path) as fit2:
+                for entry2 in fit2:
+                    if entry2.name.startswith(".") or not entry2.is_dir():
+                        continue
+                    run_path = entry2.path
+                    leaf_path = os.path.join(run_path, ".__leaf")
+                    cfg_path = os.path.join(run_path, "cfg.yaml")
+                    if os.path.isfile(leaf_path):
+                        with open(cfg_path) as handler:
+                            cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+                        args = dict_to_namespace(cfg)
+                        print(clr("\nStarting\n", attrs=["bold"]))
+                        get_function(opts)(args)
+
+
 def launch() -> None:
     """ Main function.
     """
@@ -258,6 +338,10 @@ def launch() -> None:
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
         launch_experiment(opts)
+    elif is_yaml(opts.config_path):
+        if opts.gpus:
+            raise ValueError("Cannot specify GPU when launching a single run.")
+        run_here(opts)
     else:
         raise NotImplementedError
 
