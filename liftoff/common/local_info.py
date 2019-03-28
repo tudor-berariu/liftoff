@@ -8,6 +8,9 @@ from termcolor import colored as clr
 
 
 def version():
+    """ Is there a better way to have some unique source for the version?
+        Should investigate.
+    """
     return "0.3"
 
 

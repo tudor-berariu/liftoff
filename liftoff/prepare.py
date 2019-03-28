@@ -174,7 +174,10 @@ def generate_combinations(cfg, _opts):
             for name, value in node.items():
                 queue.append((value, parent + [name]))
         else:
-            raise ValueError(f"Encountered {node} in experiment configuraiton")
+
+            raise ValueError(
+                f"Encountered {node} in configuration of {''.join(parent)}"
+            )
 
     all_names, name_to_var = var_names(variables)
 
@@ -311,6 +314,8 @@ def prepare_experiment(opts):
     else:
         if opts.name is None:
             name = os.path.basename(os.path.normpath(opts.config_path))
+            if name.endswith(".yaml"):
+                name = name[:-5]
         else:
             name = opts.name
         while True:

@@ -200,8 +200,8 @@ def launch_experiment(opts):
     resources = LiftoffResources(opts)
     active_pids = []
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
-    with open(pid_path, "a") as f:
-        f.write(f"{os.getpid():d}\n")
+    with open(pid_path, "a") as handler:
+        handler.write(f"{os.getpid():d}\n")
     while True:
         available, next_gpu = resources.is_free()
         while not available:
