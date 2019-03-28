@@ -121,6 +121,7 @@ class OptionParser:
             "--per-gpu",
             dest="per_gpu",
             nargs="*",
+            type=int,
             default=[],
             help="Maximum procs to load on each GPU.",
         )

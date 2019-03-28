@@ -29,9 +29,9 @@ class LiftoffResources:
 
         if self.gpus:
             if len(opts.gpus) == len(opts.per_gpu):
-                self.per_gpu = {g: n for g, n in zip(opts.gpus, opts.per_gpu)}
+                self.per_gpu = {g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)}
             elif len(opts.per_gpu) == 1:
-                self.per_gpu = {g: opts.per_gpu[0] for g in opts.gpus}
+                self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
                 raise ValueError("Strage per_gpu values. {opts.per_gpu}")
         else:
@@ -167,7 +167,7 @@ def launch_run(run_path, py_script, session_id, gpu=None):
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
     if gpu is not None:
-        env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
+        env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
 
     py_cmd = f"python -u {py_script:s} {cfg_path:s} --session-id {session_id}"
 
