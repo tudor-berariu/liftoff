@@ -3,10 +3,13 @@
 
 from argparse import Namespace
 from collections import OrderedDict
+import datetime
 import os.path
+import time
 from typing import List
 from tabulate import tabulate
 from termcolor import colored as clr
+import numpy as np
 from .common.experiment_info import get_experiment_paths
 from .common.options_parser import OptionParser
 
@@ -24,20 +27,13 @@ def parse_options() -> Namespace:
 def experiment_status(experiment_path):
     """ Gets full info about about an experiment.
     """
-    counts = OrderedDict({
-        ".__leaf": 0,
-        ".__start": 0,
-        ".__end": 0,
-        ".__crash": 0,
-        ".__lock": 0,
-    })
-    names = {
-        ".__leaf": "Total",
-        ".__start": "Started",
-        ".__end": "Done",
-        ".__crash": "Dead",
-        ".__lock": "Locked",
-    }
+    ntotal, nstarted, nended, ncrashed, nlocked, nlost = 0, 0, 0, 0, 0, 0
+    durations = []
+    live_durations = []
+
+    time0 = time.time()
+    time_now = time.time()  # Time now
+
     with os.scandir(experiment_path) as fit:
         for entry in fit:
             if entry.name.startswith(".") or not entry.is_dir():
@@ -46,17 +42,77 @@ def experiment_status(experiment_path):
                 for entry2 in fit2:
                     if entry2.name.startswith(".") or not entry2.is_dir():
                         continue
-                    with os.scandir(entry2.path) as fit3:
-                        for entry3 in fit3:
-                            if entry3.name in counts:
-                                counts[entry3.name] += 1
-    info = OrderedDict({"Experiment": os.path.basename(experiment_path)})
-    for key, value in counts.items():
-        info[names[key]] = value
-    progress = (info['Done'] + info['Dead']) * 100.0 / info['Total']
-    info['Dead'] = clr(f"{info['Dead']:d}", color="red")
-    info['Done'] = clr(f"{info['Done']:d}", color="green")
-    info["Progress"] = clr(f"{progress:.2f}%", attrs=['bold'])
+                    leaf_path = os.path.join(entry2.path, ".__leaf")
+                    if not os.path.isfile(leaf_path):
+                        continue
+
+                    ntotal += 1
+
+                    start_path = os.path.join(entry2.path, ".__start")
+                    lock_path = os.path.join(entry2.path, ".__lock")
+                    if os.path.isfile(start_path):
+                        nstarted += 1
+                        with open(start_path) as start_file:
+                            start_time = int(start_file.readline().strip())
+                            time0 = min(start_time, time0)
+
+                            end_path = os.path.join(entry2.path, ".__end")
+                            crash_path = os.path.join(entry2.path, ".__crash")
+
+                            if os.path.isfile(end_path):
+                                with open(end_path) as end_file:
+                                    end_time = int(end_file.readline().strip())
+                                    durations.append(end_time - start_time)
+                                nended += 1
+                            elif os.path.isfile(crash_path):
+                                with open(crash_path) as end_file:
+                                    end_time = int(end_file.readline().strip())
+                                    durations.append(end_time - start_time)
+                                ncrashed += 1
+                            elif os.path.isfile(lock_path):
+                                nlocked += 1
+                                live_durations.append(time_now - start_time)
+                            else:
+                                nlost += 1
+                    elif os.path.isfile(lock_path):
+                        nlocked += 1
+
+    durations, live_durations = np.array(durations), np.array(live_durations)
+
+    print(durations)
+    print(live_durations)
+
+    if durations:
+        avg_time = np.mean(durations)  # Average time based on finished runs
+    elif live_durations:
+        avg_time = np.mean(live_durations) * 2
+    else:
+        avg_time = 0
+
+    if avg_time > 0:
+        live_time_left = np.sum(avg_time - live_durations)
+        nleft = ntotal - nended - ncrashed - len(live_durations)
+        time_left = avg_time * nleft + live_time_left
+
+        elapsed_time = np.sum(durations) + np.sum(live_durations)
+        speedup = elapsed_time / (time_now - time0)
+        
+        left_wall_time = datetime.timedelta(seconds=int(time_left / speedup))
+
+        progress = 100.0 * elapsed_time / (elapsed_time + time_left)
+    else:
+        progress = 0
+        left_wall_time = datetime.timedelta(days=100)
+
+    info = OrderedDict({})
+    info["Experiment"] = os.path.basename(experiment_path)
+    info["Total"] = ntotal
+    info["Started"] = nstarted
+    info["Done"] = clr(f"{nended:d}", "green")
+    info["Dead"] = clr(f"{ncrashed:d}", "red")
+    info["Progress"] = clr(f"{progress:.2f}%", attrs=["bold"])
+    info["ETL"] = str(left_wall_time)
+
     return info
 
 
