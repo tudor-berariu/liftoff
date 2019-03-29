@@ -79,9 +79,6 @@ def experiment_status(experiment_path):
 
     durations, live_durations = np.array(durations), np.array(live_durations)
 
-    print(durations)
-    print(live_durations)
-
     if durations.size > 0:
         avg_time = np.mean(durations)  # Average time based on finished runs
     elif live_durations.size > 0:
@@ -106,10 +103,11 @@ def experiment_status(experiment_path):
 
     info = OrderedDict({})
     info["Experiment"] = os.path.basename(experiment_path)
-    info["Total"] = ntotal
-    info["Started"] = nstarted
+    info["Started"] = f"{nstarted:d} / {ntotal:d}"
     info["Done"] = clr(f"{nended:d}", "green")
     info["Dead"] = clr(f"{ncrashed:d}", "red")
+    if nlost > 0:
+        info["Lost"] = clr(f"{nlost:d}", "white", "on_magenta", attrs=["bold"])
     info["Progress"] = clr(f"{progress:.2f}%", attrs=["bold"])
     info["ETL"] = str(left_wall_time)
 
