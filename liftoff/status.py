@@ -89,26 +89,30 @@ def experiment_status(experiment_path):
     if avg_time > 0:
         live_time_left = np.sum(avg_time - live_durations)
         nleft = ntotal - nended - ncrashed - len(live_durations)
-        time_left = avg_time * nleft + live_time_left
+        is_over = (nleft > 0) or (live_durations.size > 0)
+
+        time_left = max(avg_time * nleft + live_time_left, 0 if is_over else 1)
 
         elapsed_time = np.sum(durations) + np.sum(live_durations)
         speedup = elapsed_time / (time_now - time0)
-        
+
         left_wall_time = datetime.timedelta(seconds=int(time_left / speedup))
 
-        progress = 100.0 * elapsed_time / (elapsed_time + time_left)
+        progress = min(100.0 * elapsed_time / (elapsed_time + time_left), 100.0)
+
     else:
         progress = 0
         left_wall_time = datetime.timedelta(days=100)
 
     info = OrderedDict({})
     info["Experiment"] = os.path.basename(experiment_path)
-    info["Started"] = f"{nstarted:d} / {ntotal:d}"
+    info["Total"] = f"{ntotal:d}"
+    info["Locked"] = f"{nlocked:d}"
     info["Done"] = clr(f"{nended:d}", "green")
     info["Dead"] = clr(f"{ncrashed:d}", "red")
     if nlost > 0:
         info["Lost"] = clr(f"{nlost:d}", "white", "on_magenta", attrs=["bold"])
-    info["Progress"] = clr(f"{progress:.2f}%", attrs=["bold"])
+    info["Progress"] = clr(f"{progress:.3f}%", attrs=["bold"])
     info["ETL"] = str(left_wall_time)
 
     return info
