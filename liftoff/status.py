@@ -82,9 +82,9 @@ def experiment_status(experiment_path):
     print(durations)
     print(live_durations)
 
-    if durations:
+    if durations.size > 0:
         avg_time = np.mean(durations)  # Average time based on finished runs
-    elif live_durations:
+    elif live_durations.size > 0:
         avg_time = np.mean(live_durations) * 2
     else:
         avg_time = 0
