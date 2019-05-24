@@ -1,241 +1,185 @@
-from argparse import ArgumentParser, Namespace
-from typing import Callable, List, Optional
-from copy import deepcopy
-import sys
-import os
-import shutil
+""" TODO: write doc
+"""
+
+from argparse import Namespace
 from functools import partial
 from importlib import import_module
-import multiprocessing
-import multiprocessing.pool
+import os
+import os.path
+import subprocess
+import sys
 import time
 import traceback
-import subprocess
-import yaml
+from typing import Callable, List
 from termcolor import colored as clr
-from numpy.random import shuffle
+import yaml
 
-from .common.argparsers import add_experiment_args, add_launch_args
-from .common.lookup import create_new_experiment_folder, get_latest_experiment
-from .common.liftoff_config import get_liftoff_config, save_local_options
-from .common.miscellaneous import ask_user_yn
-from .common.sys_interaction import systime_to
-from .version import welcome
-from .config import read_config, namespace_to_dict, config_to_string
+from .common.dict_utils import dict_to_namespace
+from .common.experiment_info import is_experiment, is_yaml
+from .common.options_parser import OptionParser
 
 
-def parse_args() -> Namespace:
-    """If you need GPU magic, please use detached processes."""
-    # TODO: clean all the fucked up arguments below
-    arg_parser = ArgumentParser()
-    add_launch_args(arg_parser)
-    add_experiment_args(arg_parser)
-    return arg_parser.parse_args()
+class LiftoffResources:
+    """ Here we have a simple class to handle GPU availability.
+    """
 
+    def __init__(self, opts):
+        self.gpus = opts.gpus
+        self.procs_no = opts.procs_no
 
-def get_exp_args(
-    cfgs: List[Namespace], root_path: str, runs_no: int
-) -> List[Namespace]:
-    """Takes the configs read from files and augments them with
-    out_dir, and run_id"""
-
-    exp_args = []
-    for j, cfg in enumerate(cfgs):
-        title = cfg.title
-        for char in " -.,=:;/()[]'+":
-            title = title.replace(char, "_")
-        while "___" in title:
-            title = title.replace("___", "__")
-
-        cfg_id = cfg.cfg_id if hasattr(cfg, "cfg_id") else j
-
-        alg_dir = f"{cfg_id:d}_{title:s}"
-        alg_path = os.path.join(root_path, alg_dir)
-
-        for f in os.scandir(root_path):
-            # A previous bad assignment
-            if f.is_dir() and f.name.endswith(title) and f.name != alg_dir:
-                assert not os.path.exists(alg_path)
-                shutil.move(os.path.join(root_path, f.name), alg_path)
-                print("moving")
-
-        if not os.path.isdir(alg_path):
-            print("not found", alg_path)
-            os.makedirs(alg_path, exist_ok=True)
-
-        if runs_no > 1:
-            for run_id in range(runs_no):
-                exp_path = os.path.join(alg_path, f"{run_id:d}")
-                if os.path.isdir(exp_path):
-                    end_file = os.path.join(exp_path, ".__end")
-                    if os.path.isfile(end_file):
-                        print(
-                            f"Skipping {cfg.title:s} <{run_id:d}>. "
-                            f"{end_file:s} exists."
-                        )
-                        continue
-                else:
-                    os.makedirs(exp_path)
-                crash_file = os.path.join(exp_path, ".__crash")
-                if os.path.isfile(crash_file):
-                    os.remove(crash_file)
-                new_cfg = deepcopy(cfg)
-                new_cfg.experiment_id = j
-                new_cfg.run_id = run_id
-                new_cfg.out_dir = exp_path
-                new_cfg.cfg_dir = exp_path
-                exp_args.append(new_cfg)
-                open(os.path.join(exp_path, ".__leaf"), "a").close()
-                cfg_file = os.path.join(exp_path, "cfg.yaml")
-                with open(cfg_file, "w") as yaml_file:
-                    yaml.safe_dump(
-                        namespace_to_dict(new_cfg),
-                        yaml_file,
-                        default_flow_style=False,
-                    )
-
-        else:
-            # if there's a single run, no individual folders are created
-            end_file = os.path.join(alg_path, ".__end")
-            if os.path.isfile(end_file):
-                print(f"Skipping {cfg.title:s}. {end_file:s} exists.")
+        if self.gpus:
+            if len(opts.gpus) == len(opts.per_gpu):
+                self.per_gpu = {g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)}
+            elif len(opts.per_gpu) == 1:
+                self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
-                crash_file = os.path.join(alg_path, ".__crash")
-                if os.path.isfile(crash_file):
-                    os.remove(crash_file)
-                new_cfg = deepcopy(cfg)
-                new_cfg.run_id = 0
-                new_cfg.experiment_id = j
-                new_cfg.out_dir = alg_path
-                new_cfg.cfg_dir = alg_path
-                exp_args.append(new_cfg)
-                open(os.path.join(alg_path, ".__leaf"), "a").close()
-                cfg_file = os.path.join(alg_path, "cfg.yaml")
-                with open(cfg_file, "w") as yaml_file:
-                    yaml.safe_dump(
-                        namespace_to_dict(cfg),
-                        yaml_file,
-                        default_flow_style=False,
-                    )
-    shuffle(exp_args)
-    return exp_args
+                raise ValueError("Strage per_gpu values. {opts.per_gpu}")
+        else:
+            self.per_gpu = None
+
+        if self.gpus:
+            self.gpu_running_procs = {g: 0 for g in self.gpus}
+        self.running_procs = 0
+
+    def process_commands(self, commands: List[str]):
+        """ Here we process some commands we got from god knows where that
+            might change the way we want to allocate resources.
+        """
+
+    def free(self, gpu=None):
+        """ Here we inform that some process ended, maybe on a specific gpu.
+        """
+        if self.gpus:
+            self.gpu_running_procs[gpu] -= 1
+        self.running_procs -= 1
+
+    def is_free(self) -> tuple:
+        """ Here we ask if there are resources available.
+        """
+        if self.running_procs >= self.procs_no:
+            return (False, None)
+        if self.gpus:
+            for gpu in self.gpus:
+                if self.gpu_running_procs[gpu] < self.per_gpu[gpu]:
+                    return (True, gpu)
+            return (False, None)
+        return (True, None)
+
+    def allocate(self, gpu=None) -> None:
+        """ Here we allocate resources for some process. Be careful, no checks
+            are being performed here. We just increment counters.
+        """
+        if self.gpus:
+            self.gpu_running_procs[gpu] += 1
+        self.running_procs += 1
 
 
-# --------------------------------------------
-# Run experiments as locally spawned processes
+def some_run_path(experiment_path):
+    """ So we have that experiment path and we ask for a single subexperiment
+        we might run now.
+    """
+
+    with os.scandir(experiment_path) as fit:
+        for entry in fit:
+            if not entry.name.startswith(".") and entry.is_dir():
+                subexp_path = os.path.join(experiment_path, entry.name)
+                with os.scandir(subexp_path) as fit2:
+                    for entry2 in fit2:
+                        if not entry2.name.startswith(".") and entry2.is_dir():
+                            run_path = os.path.join(subexp_path, entry2.name)
+                            cfg_path = os.path.join(run_path, "cfg.yaml")
+                            crash_path = os.path.join(run_path, ".__crash")
+                            end_path = os.path.join(run_path, ".__end")
+                            leaf_path = os.path.join(run_path, ".__leaf")
+                            lock_path = os.path.join(run_path, ".__lock")
+                            must_be = [cfg_path, leaf_path]
+                            must_not_be = [crash_path, end_path, lock_path]
+
+                            if any(not os.path.exists(f) for f in must_be):
+                                continue
+
+                            if any(os.path.exists(f) for f in must_not_be):
+                                continue
+
+                            return run_path
+    return None
 
 
-def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
-    start_file = os.path.join(args.out_dir, ".__start")
-    end_file = os.path.join(args.out_dir, ".__end")
-    crash_file = os.path.join(args.out_dir, ".__crash")
+def parse_options() -> Namespace:
+    """ Parse command line arguments and liftoff configuration.
+    """
 
+    opt_parser = OptionParser(
+        "liftoff",
+        [
+            "script",
+            "config_path",
+            "procs_no",
+            "gpus",
+            "per_gpu",
+            "verbose",
+            "copy_to_clipboard"
+        ],
+    )
+    return opt_parser.parse_args()
+
+
+def get_command_for_pid(pid: int) -> str:
+    """ Returns the command for a pid if that process exists.
+    """
+    result = subprocess.run(
+        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
+    )
+    return result.stdout.decode("utf-8").strip()
+
+
+def still_active(pid: int, cmd: str) -> bool:
+    """ Checks if a subprocess is still active.
+    """
+    os_cmd = get_command_for_pid(pid)
+    return cmd in os_cmd
+
+
+def lock_file(lock_path: str, session_id: str) -> bool:
+    """ Creates a file if it does not exist.
+    """
     try:
-        systime_to(start_file)
-        function(args)
-        systime_to(end_file)
-    except Exception:
-        traceback.print_exc(file=sys.stderr)
-        systime_to(crash_file)
+        lck_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(lck_fd, session_id.encode())
+        os.close(lck_fd)
+        return True
+    except FileExistsError:
+        return False
 
 
-def get_function(args: Namespace) -> Callable[[Namespace], None]:
-    sys.path.append(os.getcwd())
-    module_name = args.module
-    if module_name.endswith(".py"):
-        module_name = module_name[:-3]
-        function = "run"
-    else:
-        module_name, function = module_name.split(".")
-
-    module = import_module(module_name)
-    if function not in module.__dict__:
-        raise Exception(f"Module must have function {function}(args).")
-    return partial(wrapper, module.__dict__[function])
-
-
-def spawn_from_here(root_path: str, cfgs: List[Namespace], args: Namespace):
-
-    # Figure out what should be executed
-    function = get_function(args)
-
-    if args.gpus:
-        raise Exception("Cannot specify GPUs unless you detach processes")
-
-    if args.procs_no < 1:
-        raise Exception(f"Strange number of procs: {args.procs_no:d}")
-
-    class NoDaemonProcess(multiprocessing.Process):
-        """
-        Solution from here: https://stackoverflow.com/a/8963618/1478624
-        """
-
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-
-        daemon = property(_get_daemon, _set_daemon)
-
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
-    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
-
-    pool = MyPool(args.procs_no)
-    pool.map(function, exp_args)
-
-
-# --------------------------------------------
-# Start and detach experiments using nohup
-
-
-def get_max_procs(args: Namespace) -> int:
-    """Limit the number of processes by either CPU usage or GPU usage"""
-    if args.gpus:
-        return min(args.procs_no, args.per_gpu * len(args.gpus))
-    return args.procs_no
-
-
-def launch(
-    py_file: str,
-    exp_args: Namespace,
-    timestamp: str,
-    ppid: int,
-    root_path: str,
-    gpu: Optional[int] = None,
-) -> int:
-
-    err_path = os.path.join(exp_args.out_dir, "err")
-    out_path = os.path.join(exp_args.out_dir, "out")
-
-    start_path = os.path.join(exp_args.out_dir, ".__start")
-    end_path = os.path.join(exp_args.out_dir, ".__end")
-    crash_path = os.path.join(exp_args.out_dir, ".__crash")
-
+def launch_run(run_path, py_script, session_id, gpu=None):
+    err_path = os.path.join(run_path, "err")
+    out_path = os.path.join(run_path, "out")
+    nohup_err_path = os.path.join(run_path, "nohup.err")
+    nohup_out_path = os.path.join(run_path, "nohup.out")
+    cfg_path = os.path.join(run_path, "cfg.yaml")
+    start_path = os.path.join(run_path, ".__start")
+    end_path = os.path.join(run_path, ".__end")
+    crash_path = os.path.join(run_path, ".__crash")
     env_vars = ""
 
+    with open(cfg_path) as handler:
+        title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
+
     if gpu is not None:
-        env_vars = f"CUDA_VISIBLE_DEVICES={gpu:d} {env_vars:s}"
+        env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
+
+    py_cmd = f"python -u {py_script:s} {cfg_path:s} --session-id {session_id}"
 
     cmd = (
         f" date +%s 1> {start_path:s} 2>/dev/null &&"
-        + f" nohup sh -c '{env_vars:s} python -u {py_file:s}"
-        + f" --configs-dir {exp_args.cfg_dir:s}"
-        + f" --config-file cfg"
-        + f" --default-config-file cfg"
-        + f" --out-dir {exp_args.out_dir:s}"
-        + f" --id {timestamp:s}_{ppid:d}"
+        + f" nohup sh -c '{env_vars:s} {py_cmd:s}"
         + f" 2>{err_path:s} 1>{out_path:s}"
         + f" && date +%s > {end_path:s}"
         + f" || date +%s > {crash_path:s}'"
-        + f" 1> {os.path.join(root_path, 'nohup_out')}"
-        + f" 2> {os.path.join(root_path, 'nohup_err')}"
+        + f" 1> {nohup_out_path} 2> {nohup_err_path}"
         + f" & echo $!"
     )
-    # f" & ps --ppid $! -o pid h"
 
     print(f"Command to be run:\n{cmd:s}")
 
@@ -249,214 +193,155 @@ def launch(
     pid = int(out.decode("utf-8").strip())
     print(f"New PID is {pid:d}.")
 
-    return pid
+    return pid, gpu, title, py_cmd
 
 
-def get_command(pid: int) -> str:
-    result = subprocess.run(
-        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
-    )
-    return result.stdout.decode("utf-8").strip()
+def launch_experiment(opts):
+    resources = LiftoffResources(opts)
+    active_pids = []
+    pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
+    with open(pid_path, "a") as handler:
+        handler.write(f"{os.getpid():d}\n")
+    while True:
+        available, next_gpu = resources.is_free()
+        while not available:
+            still_active_pids = []
+            do_sleep = True
+            for info in active_pids:
+                pid, gpu, title, cmd, lock_path = info
+                if still_active(pid, cmd):
+                    still_active_pids.append(info)
+                else:
+                    print(f"> {title} seems to be over.")
+                    os.remove(lock_path)
+                    resources.free(gpu=gpu)
+                    do_sleep = False
+            active_pids = still_active_pids
+            if do_sleep:
+                time.sleep(1)
+            available, next_gpu = resources.is_free()
 
+        run_path = some_run_path(opts.experiment_path)
 
-def still_active(pid: int, py_file: str) -> bool:
-    cmd = get_command(pid)
-    # return cmd and (py_file in cmd)  # mypy doesn't like this
-    if cmd:
-        return py_file in cmd
-    return False
+        if run_path is None:
+            print("Nothing more to run here.")
+            break
 
+        lock_path = os.path.join(run_path, ".__lock")
 
-def dump_pids(path, pids):
-    with open(os.path.join(path, "active_pids"), "w") as file_handler:
-        for pid in pids:
-            file_handler.write(f"{pid:d}\n")
-
-
-def run_from_system(
-    root_path: str, timestamp: str, cfgs: List[Namespace], args: Namespace
-) -> None:
-    active_procs = []  # type: : List[Tuple[int, Optional[int]]]
-    max_procs_no = get_max_procs(args)
-    crt_pid = os.getpid()
-    print(f"PID of current process is {crt_pid:d}.")
-    print(
-        "The maximum number of experiments in parallel will be: ", max_procs_no
-    )
-
-    gpus = args.gpus
-    epg = args.per_gpu
-    py_file = args.module
-    py_file = py_file if py_file.endswith(".py") else py_file + ".py"
-    if not os.path.isfile(py_file):
-        raise FileNotFoundError(f"Could not find {py_file:s}.")
-
-    exp_args = get_exp_args(cfgs, root_path, args.runs_no)
-
-    while exp_args:
-        if len(active_procs) < max_procs_no:
-            gpu = None
-            for gpu_j in gpus:
-                if len([_ for (_, _g) in active_procs if _g == gpu_j]) < epg:
-                    gpu = gpu_j
-                    break
-            next_args = exp_args.pop()
-            new_pid = launch(
-                py_file, next_args, timestamp, crt_pid, root_path, gpu=gpu
+        if lock_file(lock_path, opts.session_id):
+            info = launch_run(
+                run_path, opts.script, opts.session_id, gpu=next_gpu
             )
-            active_procs.append((new_pid, gpu))
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
-        else:
+            active_pids.append(info + (lock_path,))
+            resources.allocate(gpu=next_gpu)
+
+    while active_pids:
+        still_active_pids = []
+        do_sleep = True
+        for info in active_pids:
+            pid, gpu, title, cmd, lock_path = info
+            if still_active(pid, cmd):
+                still_active_pids.append(info)
+            else:
+                print(f"> {title} seems to be over.")
+                os.remove(lock_path)
+                resources.free(gpu=gpu)
+                do_sleep = False
+        active_pids = still_active_pids
+        if do_sleep:
             time.sleep(1)
 
-        old_active_procs = active_procs
-        active_procs = []
-        changed = False
-        for (pid, gpu) in old_active_procs:
-            if still_active(pid, py_file):
-                active_procs.append((pid, gpu))
-            else:
-                changed = True
-                print(f"Process {pid:d} seems to be done.")
-        if changed:
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
-
-    wait_time = 1
-    while active_procs:
-        time.sleep(wait_time)
-        wait_time = min(wait_time + 1, 30)
-        old_active_procs, active_procs, changed = active_procs, [], False
-        for (pid, gpu) in old_active_procs:
-            if still_active(pid, py_file):
-                active_procs.append((pid, gpu))
-            else:
-                changed = True
-                wait_time = 1
-                print(f"Process {pid:d} seems to be done.")
-        if changed and active_procs:
-            dump_pids(root_path, [pid for (pid, _) in active_procs])
-            print(
-                "Still active: "
-                + ",".join([str(pid) for (pid, _) in active_procs])
-                + ". Stop this at any time with no risks."
-            )
-
-    print(clr("All done!", attrs=["bold"]))
+    print(clr(f"Experiment {opts.experiment_path} ended.", attrs=["bold"]))
+    os.remove(pid_path)
 
 
-def args_from_liftoff_config(args: Namespace) -> None:
-    lft_cfg = get_liftoff_config()
-    no_questions = lft_cfg is not None and lft_cfg.get("no_questions", False)
-
-    if args.module is None:
-        if lft_cfg is not None and "module" in lft_cfg:
-            args.module = lft_cfg["module"]
-        else:
-            raise RuntimeError("You did not provide a script to be run.")
-    elif not no_questions and (lft_cfg is None or "module" not in lft_cfg):
-        flag_name = "asked_about_module"
-        asked = False
-        if lft_cfg is not None:
-            asked = lft_cfg.get("history", {}).get(flag_name, False)
-        if not asked:
-            question = (
-                f"Do you want to save {args.module:s} as the "
-                + "default script for this project?"
-            )
-            new_options = {"history": {flag_name: True}}
-            try:
-                if ask_user_yn(question):
-                    new_options["module"] = args.module
-            except OSError:
-                return
-            save_local_options(new_options)
+def systime_to(timestamp_file_path: str) -> None:
+    """ Write current system time to a file.
+    """
+    cmd = f"date +%s 1> {timestamp_file_path:s}"
+    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, shell=True)
+    (_, err) = proc.communicate()
+    return err.decode("utf-8").strip()
 
 
-def create_symlink(experiment_path: str):
-    src = os.path.normpath(experiment_path)
-    dst = os.path.join(os.path.dirname(src), "latest")
-    # src = os.path.abspath(src)
-    dst = os.path.abspath(dst)
-    if os.path.islink(dst):
-        os.unlink(dst)
-    os.symlink(os.path.basename(src), dst)
+def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
+    """ Wrapper around function to be called that also writes info files.
+    """
+    start_path = os.path.join(args.out_dir, ".__start")
+    end_path = os.path.join(args.out_dir, ".__end")
+    crash_path = os.path.join(args.out_dir, ".__crash")
+    lock_path = os.path.join(args.out_dir, ".__lock")
+
+    if lock_file(lock_path, ""):
+        try:
+            systime_to(start_path)
+            function(args)
+            systime_to(end_path)
+        except Exception:  # pylint: disable=broad-except
+            traceback.print_exc(file=sys.stderr)
+            systime_to(crash_path)
+        finally:
+            os.remove(lock_path)
 
 
-def main():
-    welcome()
-
-    args = parse_args()
-
-    args_from_liftoff_config(args)
-
-    print(config_to_string(args))
-
-    # Read configuration files
-
-    cfgs = read_config(strict=False)
-    cfg0 = cfgs if not isinstance(cfgs, list) else cfgs[0]
-    cfgs = [cfgs] if not isinstance(cfgs, list) else cfgs
-
-    if args.resume:
-        # -------------------- RESUMING A PREVIOUS EXPERIMENT -----------------
-        full_name, experiment_path = get_latest_experiment(
-            cfg0.experiment,
-            args.timestamp,
-            args.timestamp_fmt,
-            args.results_dir,
-        )
+def get_function(opts: Namespace) -> Callable[[Namespace], None]:
+    """ Loads the script and calls run(opts)
+    """
+    sys.path.append(os.getcwd())
+    module_name = opts.script
+    if module_name.endswith(".py"):
+        module_name = module_name[:-3]
+        function = "run"
     else:
-        # -------------------- STARTING A NEW EXPERIMENT --------------------
-        full_name, experiment_path = create_new_experiment_folder(
-            cfg0.experiment, args.timestamp_fmt, args.results_dir
-        )
+        module_name, function = module_name.split(".")
 
-    create_symlink(experiment_path)
+    module = import_module(module_name)
+    if function not in module.__dict__:
+        raise Exception(f"Module must have function {function}(args).")
+    return partial(wrapper, module.__dict__[function])
 
-    timestamp, *_other = full_name.split("_")
 
-    with open(os.path.join(experiment_path, ".__ppid"), "w") as ppid_file:
-        ppid_file.write(f"{os.getpid():d}\n")
-    if args.comment:
-        with open(os.path.join(experiment_path, ".__comment"), "w") as c_file:
-            c_file.write(args.comment)
+def run_here(opts):
+    from .prepare import parse_options as prepare_parse_options
+    from .prepare import prepare_experiment
+    prep_args = [opts.config_path, "--do"]
+    if opts.copy_to_clipboard:
+        prep_args.append("--cc")
+    prepare_opts = prepare_parse_options(prep_args)
+    opts.experiment_path = prepare_experiment(prepare_opts)
 
-    if len(cfgs) == 1 and args.runs_no == 1:
-        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
-            m_file.write("single\n")
+    with os.scandir(opts.experiment_path) as fit:
+        for entry in fit:
+            if entry.name.startswith(".") or not entry.is_dir():
+                continue
+            with os.scandir(entry.path) as fit2:
+                for entry2 in fit2:
+                    if entry2.name.startswith(".") or not entry2.is_dir():
+                        continue
+                    run_path = entry2.path
+                    leaf_path = os.path.join(run_path, ".__leaf")
+                    cfg_path = os.path.join(run_path, "cfg.yaml")
+                    if os.path.isfile(leaf_path):
+                        with open(cfg_path) as handler:
+                            cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+                        args = dict_to_namespace(cfg)
+                        print(clr("\nStarting\n", attrs=["bold"]))
+                        get_function(opts)(args)
 
-        cfg = cfgs[0]
-        cfg.experiment_id = 0
 
-        # Check if .__end file is already there (experiment is over)
-        end_file = os.path.join(experiment_path, ".__end")
-        if os.path.isfile(end_file):
-            print(f"Skipping {cfgs[0].title:s}. {end_file:s} exists.")
-            return
+def launch() -> None:
+    """ Main function.
+    """
+    opts = parse_options()
 
-        crash_file = os.path.join(experiment_path, ".__crash")
-        if os.path.isfile(crash_file):
-            os.remove(crash_file)
-
-        # Dump config file if there is none
-        cfg_file = os.path.join(experiment_path, "cfg.yaml")
-        if not os.path.isfile(cfg_file):
-            with open(cfg_file, "w") as yaml_file:
-                yaml.safe_dump(
-                    namespace_to_dict(cfg), yaml_file, default_flow_style=False
-                )
-        open(os.path.join(experiment_path, ".__leaf"), "a").close()
-        cfg.out_dir, cfg.run_id = experiment_path, 0
-        get_function(args)(cfg)
-    elif args.no_detach:
-        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
-            m_file.write("multiprocess\n")
-        spawn_from_here(experiment_path, cfgs, args)
+    if is_experiment(opts.config_path):
+        opts.experiment_path = opts.config_path
+        launch_experiment(opts)
+    elif is_yaml(opts.config_path):
+        if opts.gpus:
+            raise ValueError("Cannot specify GPU when launching a single run.")
+        run_here(opts)
     else:
-        with open(os.path.join(experiment_path, ".__mode"), "w") as m_file:
-            m_file.write("nohup\n")
-        run_from_system(experiment_path, timestamp, cfgs, args)
+        raise NotImplementedError
 
-
-if __name__ == "__main__":
-    main()

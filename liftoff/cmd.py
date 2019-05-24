@@ -1,34 +1,63 @@
-
-def launch():
-    from liftoff.liftoff import main as _launch
-    _launch()
+""" Here we define wrapper functions to be called when one invokes
+    console commands.
+"""
 
 
 def prepare():
-    from liftoff.prepare import main as _prepare
+    """ liftoff-prepare
+    """
+    from .common.local_info import hello
+    from .prepare import prepare as _prepare
+
+    hello()
     _prepare()
 
 
-def status():
-    from liftoff.liftoff_utils import status as _status
-    _status()
+def liftoff():
+    """ liftoff-prepare
+    """
+    from .common.local_info import hello
+    from .liftoff import launch as _liftoff
+
+    hello()
+    _liftoff()
+
+
+def clean():
+    """ liftoff-clean
+    """
+    from .common.local_info import hello
+    from .sanitizer import clean as _clean
+
+    hello()
+    _clean()
 
 
 def abort():
-    from liftoff.liftoff_utils import abort as _abort
+    """ liftoff-abort
+    """
+    from .common.local_info import hello
+    from .abort import abort as _abort
+
+    hello()
     _abort()
 
 
-def commit():
-    from liftoff.liftoff_results import commit as _commit
-    _commit()
+def procs():
+    """ liftoff-procs
+    """
+    from .common.local_info import hello
+    from .proc_info import procs as _procs
+
+    hello()
+    _procs()
 
 
-def errors():
-    from liftoff.errors import main as _errors
-    _errors()
+def status():
+    """ liftoff-status
+    """
+    from .common.local_info import hello
+    from .status import status as _status
 
-
-def elite():
-    from liftoff.elite import elite as _elite
-    _elite()
+    hello()
+    _status()

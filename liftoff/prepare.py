@@ -1,300 +1,482 @@
+""" Here we implement the script that prepares an experiment to be run with
+    liftoff.
+
+    There are two intended use cases for this script:
+
+    1) For experiments defined by two files 'default.yaml' and 'config.yaml':
+
+        liftoff <config-dir>
+
+    2) For experiments defined by a single file you want to run multiple times:
+
+        liftoff <config-file>
+
+    Both command support the following command line arguments:
+        --name <new-name>
+        --runs-no <runs-nu>
+        --timestamp-fmt <timestamp-fmt>
+        --experiments-dir <experiments-dir>
+        --append-to <experiment-full-name>
+        --dry-run
+"""
+
+from argparse import Namespace
+from datetime import datetime
 from copy import copy, deepcopy
-from itertools import product
-from argparse import ArgumentParser, Namespace
-from typing import Any, Dict, Iterable, List, Tuple, Union
+import itertools
 import os.path
-from functools import partial
-import yaml
+import string
+from typing import List
+import pyperclip
 from termcolor import colored as clr
+import yaml
 
-from .common.liftoff_config import get_liftoff_config
-from .common.tips import display_tips
-from .version import welcome
-
-# Typing
-
-VarId = int
-VarPath = List[str]
-Variables = Dict[VarId, VarPath]
-Domain = List[Any]
-Domains = Dict[VarId, Domain]
-Assignment = Dict[VarId, Any]
-BadPairs = Dict[Tuple[VarId, VarId], List[Tuple[Any, Any]]]
+from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
+from .common.options_parser import OptionParser
 
 
-def get_args() -> Namespace:
-    """Read command line arguments for liftoff-prepare"""
-    arg_parser = ArgumentParser("Prepare experiment for liftoff")
-    arg_parser.add_argument(
-        "experiment", type=str, help="Experiment to prepare"
-    )
-    arg_parser.add_argument(
-        "-f",
-        "--force",
-        action="store_true",
-        default=False,
-        dest="force",
-        help="Delete other generated files if found.",
-    )
-    arg_parser.add_argument(
-        "-c",
-        "--clean",
-        action="store_true",
-        default=False,
-        dest="clean",
-        help="Deletes generated files if found.",
+VALID_CHARS = f"-_.(){string.ascii_letters:s}{string.digits:s}"
+KNOWN_CONSTRAINTS = ["->", "<=>", "v", "!!"]
+
+
+def safe_file_name(title: str):
+    """ Replaces all symbols except those in VALID_CHARS with '_'.
+    """
+    return "".join(map(lambda c: c if c in VALID_CHARS else "_", title))
+
+
+def parse_options(args: List[str] = None, strict: bool = True) -> Namespace:
+    """ Parse command line arguments and liftoff configuration.
+    """
+
+    opt_parser = OptionParser(
+        "liftoff-prepare",
+        [
+            "config_path",
+            "name",
+            "runs_no",
+            "timestamp_fmt",
+            "results_path",
+            "append_to",
+            "do",
+            "overwrite",
+            "verbose",
+            "copy_to_clipboard",
+        ],
     )
 
-    return arg_parser.parse_args()
+    return opt_parser.parse_args(args=args, strict=strict)
 
 
-def check_paths(experiment: str, clean: bool = False) -> Tuple[str, str]:
-    """Checks required files for experiment"""
-    assert os.path.isdir("configs"), "configs folder is missing"
-    exp_path: str = os.path.join("configs", experiment)
-    assert os.path.isdir(exp_path), f"{exp_path:s} folder is missing"
+def idxs_of_duplicates(lst):
+    """ Returns the indices of duplicate values.
+    """
+    idxs_of = dict({})
+    dup_idxs = []
+    for idx, value in enumerate(lst):
+        idxs_of.setdefault(value, []).append(idx)
+    for idxs in idxs_of.values():
+        if len(idxs) > 1:
+            dup_idxs.extend(idxs)
+    return dup_idxs
 
-    default_path: str = os.path.join(exp_path, "default.yaml")
-    assert os.path.isfile(default_path), f"{default_path:s} is missing"
 
-    config_path: str = os.path.join(exp_path, f"config.yaml")
-    assert os.path.isfile(config_path), f"{config_path:s} is missing"
+def var_names(variables):
+    """ Computes all non-ambiguous names a variable might take.
+    """
+    name_to_var = dict({})
+    names = []
+    lengths = [1 for _ in variables]
+    candidates = [".".join(v[-l:]) for (v, l) in zip(variables, lengths)]
+    dup_idxs = idxs_of_duplicates(candidates)
+    while dup_idxs:
+        for idx in dup_idxs:
+            lengths[idx] = length = min(len(variables[idx]), lengths[idx] + 1)
+            candidates[idx] = ".".join(variables[idx][-length:])
+        dup_idxs = idxs_of_duplicates(candidates)
+    for idx, (var, length) in enumerate(zip(variables, lengths)):
+        vnames = [".".join(var[-l:]) for l in range(length, len(var) + 1)]
+        names.append(vnames)
+        for name in vnames:
+            name_to_var[name] = idx
 
-    file_name: str
-    for file_name in os.listdir(exp_path):
-        if file_name.startswith(experiment) and file_name.endswith(".yaml"):
-            f_path: str = os.path.join(exp_path, file_name)
-            if clean:
-                os.remove(f_path)
+    return names, name_to_var
+
+
+def check(values, constraints):
+    """ Checks the given assignment against given constraints.
+    """
+    for idx0, idx1, restrictions in constraints:
+        should_del0, should_del1 = False, False
+        for rtype, pairs in restrictions.items():
+            if rtype == "->":
+                for val0, val1 in pairs:
+                    if val0 == values[idx0]:
+                        if values[idx1] != val1:
+                            return False
+                        if val1 == "delete":
+                            should_del1 = True
+                        break
+            elif rtype == "<=>":
+                for val0, val1 in pairs:
+                    if val0 == values[idx0]:
+                        if values[idx1] != val1:
+                            return False
+                        if val1 == "delete":
+                            should_del1 = True
+                        break
+                    if val1 == values[idx1]:
+                        if values[idx0] != val0:
+                            return False
+                        if val0 == "delete":
+                            should_del0 = True
+                        break
+            elif rtype == "v":
+                for val0, val1 in pairs:
+                    if val0 != values[idx0] and val1 != values[idx1]:
+                        return False
+            elif rtype == "!!":
+                for val0, val1 in pairs:
+                    if val0 == values[idx0] and val1 == values[idx1]:
+                        return False
             else:
-                raise RuntimeError(f"Found this file: {f_path:s}.")
-
-    return exp_path, config_path
-
-
-def to_var_path(val: Union[str, dict]) -> List[str]:
-    if isinstance(val, str):
-        return [val]
-    elif isinstance(val, dict):
-        assert len(val) == 1
-        return list(val.keys()) + to_var_path(list(val.values())[0])
-    raise ValueError
+                raise NotImplementedError
+        if values[idx0] == "delete" and not should_del0:
+            return False
+        if values[idx1] == "delete" and not should_del1:
+            return False
+    return True
 
 
-def get_variables(config_data: dict) -> Tuple[Variables, Domains, BadPairs]:
+def generate_combinations(cfg, _opts):
+    """ This is actually the function we wrote the whole script for.
+    """
 
-    if "filter_out" in config_data:
-        filter_out = config_data["filter_out"]
-        del config_data["filter_out"]
-    else:
-        filter_out = []
-
-    if "constraints" in config_data:
-        constraints = config_data["constraints"]
-        del config_data["constraints"]
+    if "liftoff" in cfg:
+        constraints = cfg["liftoff"]
+        del cfg["liftoff"]
+        if not isinstance(constraints, list):
+            raise ValueError(f"Expected list of constraints, got {constraints}")
     else:
         constraints = []
 
-    queue: List[Tuple[Union[list, dict], VarPath]] = [(config_data, [])]
-
-    var_id: VarId = 0
-    variables: Dict[VarId, VarPath] = {}
-    domains: Dict[VarId, Domain] = {}
+    queue = [(cfg, [])]
+    var_id = 0
+    variables, domains = [], []
 
     while queue:
         node, parent = queue.pop()
         if isinstance(node, list):
-            # This means @parent is a variable with multiple values
-            variables[var_id] = copy(parent)
-            domains[var_id] = deepcopy(node)
+            variables.append(copy(parent))
+            domains.append(deepcopy(node))
             var_id += 1
         elif isinstance(node, dict):
-            # We go deeper
             for name, value in node.items():
                 queue.append((value, parent + [name]))
         else:
-            assert False, "Something went wrong with " + str(node)
 
-    print(variables)
+            raise ValueError(
+                f"Encountered {node} in configuration of {''.join(parent)}"
+            )
 
-    bad_pairs: BadPairs = {}
-    for bad_pair in filter_out:
-        vp1: VarPath = to_var_path(bad_pair["left"])
-        vp2: VarPath = to_var_path(bad_pair["right"])
-        pairs: List[Tuple[Any, Any]] = list(map(tuple, bad_pair["exclude"]))
+    all_names, name_to_var = var_names(variables)
 
-        try:
-            [var1_id] = [
-                k
-                for (k, v) in variables.items()
-                if v[-len(vp1) :] == vp1 and len(v) >= len(vp1)
-            ]
-        except ValueError:
-            [var1_id] = [k for (k, v) in variables.items() if v == vp1]
-        try:
-            [var2_id] = [
-                k
-                for (k, v) in variables.items()
-                if v[-len(vp2) :] == vp2 and len(v) >= len(vp1)
-            ]
-        except ValueError:
-            [var2_id] = [k for (k, v) in variables.items() if v == vp2]
-        assert all(x in domains[var1_id] for (x, _) in pairs)
-        assert all(y in domains[var2_id] for (_, y) in pairs)
+    print(clr(f"\nFound {len(variables):d} variables:", attrs=["bold"]))
+    width = max(len(names[0]) for names in all_names)
+    for names, domain in zip(all_names, domains):
+        print(f"\t{names[0]:{width + 2}s} with {len(domain):d} values")
 
-        bad_pairs[(var1_id, var2_id)] = pairs
-
-        p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
-        v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
-        print(f"Won't allow {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
-
-    mandatory_pairs: BadPairs = {}
+    new_constraints = []
     for constraint in constraints:
-        vp1: VarPath = to_var_path(constraint["left"])
-        vp2: VarPath = to_var_path(constraint["right"])
-        pairs: List[Tuple[Any, Any]] = list(map(tuple, constraint["constrain"]))
-        try:
-            [var1_id] = [
-                k
-                for (k, v) in variables.items()
-                if v[-len(vp1) :] == vp1 and len(v) >= len(vp1)
-            ]
-        except ValueError:
-            [var1_id] = [k for (k, v) in variables.items() if v == vp1]
-        try:
-            [var2_id] = [
-                k
-                for (k, v) in variables.items()
-                if v[-len(vp2) :] == vp2 and len(v) >= len(vp1)
-            ]
-        except ValueError:
-            [var2_id] = [k for (k, v) in variables.items() if v == vp2]
-        assert all(x in domains[var1_id] for (x, _) in pairs)
-        assert all(y in domains[var2_id] for (_, y) in pairs)
+        if not isinstance(constraint, dict):
+            raise ValueError(f"Expected dict for constraint, not {constraint}")
+        if "vars" not in constraint:
+            raise ValueError(f"Expected 'vars' in constraint {constraint}")
+        cvars = constraint["vars"]
+        if (  # pylint: disable=bad-continuation
+            len(cvars) != 2
+            or cvars[0] not in name_to_var
+            or cvars[1] not in name_to_var
+        ):
+            raise ValueError(f"Could not indetify vars in {cvars}")
+        idx0, idx1 = name_to_var[cvars[0]], name_to_var[cvars[1]]
+        var0, var1 = all_names[idx0][-1], all_names[idx1][-1]
+        restrictions = {}
+        for key, values in constraint.items():
+            if key != "vars":
+                if key not in KNOWN_CONSTRAINTS:
+                    raise ValueError(f"Strainge constraint {key}")
+                if not isinstance(values, list):
+                    raise ValueError(f"Expected list of pairs not {values}")
+                for val0, val1 in values:
+                    if val0 not in domains[idx0]:
+                        if val0 == "delete":
+                            domains[idx0].append("delete")
+                        else:
+                            raise ValueError(f"{val0} not in {var0}'s domain'")
+                    if val1 not in domains[idx1]:
+                        if val1 == "delete":
+                            domains[idx1].append("delete")
+                        else:
+                            raise ValueError(f"{val1} not in {var1}'s domain'")
+                restrictions[key] = values
 
-        mandatory_pairs[(var1_id, var2_id)] = pairs
+        new_constraints.append((idx0, idx1, restrictions))
+    constraints = new_constraints
 
-        p_str = ", ".join(list(map(lambda p: f"({p[0]}, {p[1]})", pairs)))
-        v_str = f"({'.'.join(vp1):s}, {'.'.join(vp2):s})"
-        print(f"Will constrain {clr(v_str, attrs=['bold']):s} from {p_str:s}.")
+    print(clr("\nConstraints:", attrs=["bold"]))
+    for idx0, idx1, restrictions in constraints:
 
-    return variables, domains, bad_pairs, mandatory_pairs
+        name0, name1 = all_names[idx0][0], all_names[idx1][0]
+        for rtype, values in restrictions.items():
+            if rtype in ["->", "<=>", "v"]:
+                print("\t", end="")
+                print(
+                    " & ".join(
+                        [
+                            f"{name0}={v0} {rtype} {name1}={v1}"
+                            for v0, v1 in values
+                        ]
+                    )
+                )
+            elif rtype == "!!":
+                print("\t", end="")
+                print(
+                    " & ".join(
+                        [f"!({name0}={v0} & {name1}={v1})" for v0, v1 in values]
+                    )
+                )
+    for values in itertools.product(*domains):
+        if not constraints or check(values, constraints):
+            cfg = {}
+            title = []
+            for idx, (var, value) in enumerate(zip(variables, values)):
+                if value != "delete":
+                    title.append(f"{all_names[idx][-1]}={value}")
+                dct = cfg
+                for parent in var[:-1]:
+                    dct = dct.setdefault(parent, {})
+                dct[var[-1]] = value
+
+            yield (cfg, "; ".join(title))
 
 
-def get_names(variables: Variables) -> Dict[VarId, str]:
+def prepare_single_subexperiment(opts: Namespace):
+    """ Here we add a single sub-experiment to an experiment.
+    """
+    with open(opts.config_path) as handler:
+        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
 
-    left_vars: List[VarId] = list(variables.keys())  # variables to be named
-    names: Dict[VarId, str] = {}  # final names
-    depth: int = 1  # how many parts to take from the path
+    title = os.path.basename(os.path.normpath(opts.config_path))
+    if title.endswith(".yaml"):
+        title = title[:-5]
 
-    while left_vars:
-        new_names = {j: ".".join(variables[j][-depth:]) for j in left_vars}
-        left_vars = []
-        for j, crt_name in new_names.items():
-            if len([0 for v in new_names.values() if v == crt_name]) > 1:
-                left_vars.append(j)
+    yield config_data, title, {}
+
+
+def prepare_multiple_subexperiments(opts):
+    """ Here we assume there are either two files: config.yaml and default.yaml
+        or a bunch of files that will be added as single experiments.
+    """
+
+    default_path = os.path.join(opts.config_path, "default.yaml")
+    config_path = os.path.join(opts.config_path, "config.yaml")
+
+    with open(config_path) as handler:
+        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+
+    with open(default_path) as handler:
+        default_data = yaml.load(handler, Loader=yaml.SafeLoader)
+
+    for exp_cfg, title in generate_combinations(config_data, opts):
+        full_cfg = deep_update_dict(deepcopy(default_data), exp_cfg)
+        yield full_cfg, title, exp_cfg
+
+
+def prepare_experiment(opts):
+    """ This function does all the work.
+    """
+    total_se, new_se, existing_se = 0, 0, 0
+    total_runs, new_runs, existing_runs = 0, 0, 0
+    written_runs = 0
+
+    experiment_path = None
+
+    if not opts.do:
+        print("\nThis will produce no effects. Use --do to create files.")
+
+    if opts.append_to is not None:
+        if not os.path.isdir(opts.append_to):
+            raise RuntimeError(f"{opts.append_to} is not a folder.")
+        if opts.name is not None:
+            print("Option --name {opts.name} will be ignored.")
+        experiment_path = opts.append_to
+    else:
+        if opts.name is None:
+            name = os.path.basename(os.path.normpath(opts.config_path))
+            if name.endswith(".yaml"):
+                name = name[:-5]
+        else:
+            name = opts.name
+        while True:
+            timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
+            full_name = f"{timestamp:s}_{name:s}/"
+            experiment_path = os.path.join(opts.results_path, full_name)
+            if not os.path.exists(experiment_path):
+                break
+
+    print("")
+    print("Will configure experiment in", clr(experiment_path, attrs=["bold"]))
+
+    opts.experiment_path = experiment_path
+
+    if os.path.isfile(opts.config_path):
+        new_cfgs = prepare_single_subexperiment(opts)
+    elif os.path.isdir(opts.config_path):
+        new_cfgs = prepare_multiple_subexperiments(opts)
+    else:
+        raise RuntimeError(f"Could not find {opts.config_path}")
+
+    start_idx = 0
+    existing = dict({})
+
+    if opts.do and not opts.append_to:
+        os.makedirs(experiment_path)
+
+    if opts.do:
+        open(os.path.join(experiment_path, ".__experiment"), "a").close()
+
+    if opts.append_to:
+        for fle in os.scandir(opts.experiment_path):
+            if fle.is_dir():
+                try:
+                    start_idx = max(start_idx, int(fle.name.split("_")[0]) + 1)
+                except ValueError:
+                    pass
+                try:
+                    path_parts = [opts.experiment_path, fle.name, ".__cfg_hash"]
+                    with open(os.path.join(*path_parts)) as hndlr:
+                        cfg_hash = hndlr.readline().strip()
+                    existing[cfg_hash] = fle.name
+                except FileNotFoundError:
+                    pass
+
+        print(f"New experiments will start from index {start_idx:d}.")
+
+    for (full_cfg, title, exp_cfg) in new_cfgs:
+        clean_dict(full_cfg)
+        total_se += 1
+        if opts.verbose and opts.verbose > 0:
+            print(f"Adding sub-experiment: {clr(title, attrs=['bold'])}.")
+        cfg_hash = hashstr(uniqstr(full_cfg))
+        if cfg_hash in existing:
+
+            if opts.verbose and opts.verbose > 0:
+                print(f"Sub-xperiment {title} already", clr("exists", "green"))
+            path_parts = [opts.experiment_path, existing[cfg_hash]]
+            subexperiment_path = os.path.join(*path_parts)
+            existing_se += 1
+        else:
+            candidate_name = safe_file_name(f"{start_idx:04d}_{title:s}")
+            if len(candidate_name) < 255:
+                path_parts = [opts.experiment_path, candidate_name]
             else:
-                names[j] = new_names[j]
-        depth += 1
+                hash_name = safe_file_name(f"{start_idx:04d}_{cfg_hash:s}")
+                path_parts = [opts.experiment_path, hash_name]
+            subexperiment_path = os.path.join(*path_parts)
+            if opts.do:
+                os.mkdir(subexperiment_path)
+                hash_path = os.path.join(subexperiment_path, ".__cfg_hash")
+                with open(hash_path, "w") as hndlr:
+                    hndlr.writelines([cfg_hash])
+            new_se += 1
+            start_idx += 1
 
-    return names
+        # Here we know that subexperiment_path exists
+        for run_id in range(opts.runs_no):
+            run_path = os.path.join(subexperiment_path, str(run_id))
+            total_runs += 1
+            if os.path.exists(run_path):
+                existing_runs += 1
+                if not os.path.isdir(run_path):
+                    raise RuntimeError(f"{run_path} is not a folder")
+            else:
+                new_runs += 1
+                if opts.do:
+                    os.mkdir(run_path)
 
+            cfg_path = os.path.join(run_path, "cfg.yaml")
+            end_path = os.path.join(run_path, ".__end")
+            lock_path = os.path.join(run_path, ".__lock")
+            leaf_path = os.path.join(run_path, ".__leaf")
 
-def check_assignment(
-    bad_pairs: BadPairs, mandatory_pairs: BadPairs, assignment: Assignment
-) -> bool:
-    for (var1, var2), bad_values in bad_pairs.items():
-        if (assignment[var1], assignment[var2]) in bad_values:
-            return False
-    for (var1, var2), mandatory_values in mandatory_pairs.items():
-        for (val1, val2) in mandatory_values:
-            if assignment[var1] == val1 and assignment[var2] != val2:
-                return False
-            elif assignment[var1] != val1 and assignment[var2] == val2:
-                return False
-    return True
+            write_files = True
+            if os.path.exists(lock_path) or os.path.exists(end_path):
+                print(clr(f"{run_path:s} is locked", "red"))
+                write_files = False
+            elif not opts.overwrite and os.path.exists(cfg_path):
+                write_files = False
 
+            written_runs += int(write_files)
 
-def prod_domains(
-    domains: Domains, bad_pairs: BadPairs, mandatory_pairs: BadPairs
-) -> Iterable[Assignment]:
-    return filter(
-        partial(check_assignment, bad_pairs, mandatory_pairs),
-        map(
-            lambda a: {k: v for (k, v) in zip(domains.keys(), a)},
-            product(*domains.values()),
-        ),
+            if write_files and opts.do:
+                run_cfg = deepcopy(full_cfg)
+                run_cfg["out_dir"] = run_path
+                run_cfg["run_id"] = run_id
+                run_cfg["title"] = title
+                if exp_cfg:
+                    run_cfg["experiment_arguments"] = exp_cfg
+
+                with open(cfg_path, "w") as yaml_file:
+                    yaml.safe_dump(run_cfg, yaml_file, default_flow_style=False)
+
+                open(leaf_path, "a").close()
+
+    print(clr("\nSummary:", attrs=["bold"]))
+    print(
+        "\tSub-experiments:",
+        clr(f"{total_se:d}", attrs=["bold"]),
+        "|",
+        "New:",
+        clr(f"{new_se:d}", attrs=["bold"]),
+        "|",
+        "Existing:",
+        clr(f"{existing_se:d}", attrs=["bold"]),
     )
 
+    print(
+        "\tRuns:",
+        clr(f"{total_runs:d}", attrs=["bold"]),
+        "|",
+        "New:",
+        clr(f"{new_runs:d}", attrs=["bold"]),
+        "|",
+        "Existing:",
+        clr(f"{existing_runs:d}", attrs=["bold"]),
+        "|",
+        "Written:",
+        clr(f"{written_runs:d}", attrs=["bold"]),
+    )
 
-def combine_values(
-    variables: Variables, values: Assignment, names: Dict[int, str]
-) -> dict:
-    crt_values: dict = {}
-    info: List[str] = []
-    for var_id, value in values.items():
-        parent = crt_values
-        var_path = variables[var_id]
-        for key in var_path[:-1]:
-            parent = parent.setdefault(key, {})
-        parent[var_path[-1]] = copy(value)
-        name = names[var_id].strip("_")
-        if isinstance(value, dict) and "__name" in value:
-            info.append(f"{name:s}={value['__name']:s}")
-        else:
-            info.append(f"{name:s}={value}")
-    crt_values["title"] = "; ".join(info)
-    return crt_values
-
-
-def main():
-
-    welcome()
-
-    args = get_args()  # type: Namespace
-    experiment = args.experiment.strip("/")  # type: str
-    exp_path, config_path = check_paths(experiment, args.force or args.clean)
-
-    if args.clean:
-        print("Cleaned.")
-        return
-
-    with open(config_path) as config_file:
-        config_data = yaml.load(config_file, Loader=yaml.SafeLoader)
-
-    # BFS to get all variables
-
-    variables, domains, bad_pairs, mandatory_pairs = get_variables(config_data)
-    names = get_names(variables)
-
-    for var_id, name in names.items():
+    if not opts.do:
         print(
-            f"{len(domains[var_id]):d} values for "
-            f"{clr(name, attrs=['bold']):s}"
+            "\nThis was just a simultation. Rerun with",
+            clr("--do", attrs=["bold"]),
+            "to prepare experiment for real.",
         )
 
-    num = 0
-    for idx, values in enumerate(
-        prod_domains(domains, bad_pairs, mandatory_pairs)
-    ):
-        crt_values = combine_values(variables, values, names)
-        crt_values["_experiment_parameters"] = {
-            names[var_id]: value for var_id, value in values.items()
-        }
-        crt_values["cfg_id"] = idx
-        file_path = os.path.join(exp_path, f"{experiment:s}_{idx:d}.yaml")
-        with open(file_path, "w") as yaml_file:
-            yaml.safe_dump(crt_values, yaml_file, default_flow_style=False)
-        num += 1
+        return None
 
-    print(f"{clr(f'{num:d} configurations', attrs=['bold']):s} created.")
-    print("done.")
+    print("\nExperiment configured in", clr(experiment_path, attrs=["bold"]))
+    if opts.copy_to_clipboard:
+        pyperclip.copy(experiment_path)
+        print("Experiment path copied to clipboard.")
 
-    config = get_liftoff_config()
-    if not config or not config.get("no_tips", False):
-        print("")
-        display_tips(topic="prepare")
+    return experiment_path
 
 
-if __name__ == "__main__":
-    main()
+def prepare(strict: bool = True) -> None:
+    """ Main function.
+    """
+    opts = parse_options(strict=strict)
+    prepare_experiment(opts)

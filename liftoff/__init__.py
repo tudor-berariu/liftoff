@@ -1,25 +1,32 @@
-from .liftoff import parse_args
-from .config import read_config, config_to_string
-from .common.lookup import create_new_experiment_folder
+""" Liftoff...
+"""
+
+import yaml
+from .common.dict_utils import dict_to_namespace
+from .common.options_parser import OptionParser
 
 
-def prepare_experiment():
-    import os
+def parse_opts():
+    """ This should be called by all scripts prepared by liftoff.
+
+        python script.py results/something/cfg.yaml
+
+        in your script.py
+
+          if __name__ == "__main__":
+              from liftoff import parse_opts()
+              main(parse_opts())
+    """
+
     import os.path
 
-    args = parse_args()  # type: Namespace
-    cfg = read_config(strict=False)
-
-    if not hasattr(args, "out_dir") or args.out_dir is None:
-        _full_name, experiment_path = create_new_experiment_folder(
-            cfg.experiment, args.timestamp_fmt, args.results_dir
-        )
-        cfg.out_dir = experiment_path
-    elif not os.path.isdir(args.out_dir):
-        raise Exception(f"Directory {args.out_dir} does not exist.")
-
-    if not hasattr(args, "run_id"):
-        cfg.run_id = 0
-
-    print(config_to_string(cfg))
-    return cfg
+    opt_parser = OptionParser("liftoff", ["config_path", "session_id"])
+    opts = opt_parser.parse_args()
+    with open(opts.config_path) as handler:
+        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+    opts = dict_to_namespace(config_data)
+    if not hasattr(opts, "out_dir"):
+        raise RuntimeError("No out_dir in config file.")
+    if not os.path.isdir(opts.out_dir):  # pylint: disable=no-member
+        raise RuntimeError("Out dir does not exist.")
+    return opts
