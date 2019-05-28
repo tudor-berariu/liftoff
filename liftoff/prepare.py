@@ -208,6 +208,7 @@ def generate_combinations(cfg, _opts):
                     raise ValueError(f"Strainge constraint {key}")
                 if not isinstance(values, list):
                     raise ValueError(f"Expected list of pairs not {values}")
+                left_to_right, right_to_left = dict({}), dict({})
                 for val0, val1 in values:
                     if val0 not in domains[idx0]:
                         if val0 == "delete":
@@ -219,6 +220,27 @@ def generate_combinations(cfg, _opts):
                             domains[idx1].append("delete")
                         else:
                             raise ValueError(f"{val1} not in {var1}'s domain'")
+                    if key == "<=>":
+                        bad = False
+                        if val0 in left_to_right:
+                            msg = (
+                                f"({var0}={val0} <=> "
+                                f"{var1}={left_to_right[val0]}) && "
+                                f"({var0}={val0} <=> {var1}={val1})"
+                            )
+                            bad = True
+                        elif val1 in right_to_left:
+                            msg = (
+                                f"({var0}={right_to_left[val1]} <=> "
+                                f"{var1}={val1}) && "
+                                f"({var0}={val0} <=> {var1}={val1})"
+                            )
+                            bad = True
+                        if bad:
+                            raise ValueError(f"Inconsistency detected: {msg}.")
+                        left_to_right[val0] = val1
+                        right_to_left[val1] = val0
+
                 restrictions[key] = values
 
         new_constraints.append((idx0, idx1, restrictions))
