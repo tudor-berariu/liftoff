@@ -4,10 +4,12 @@
 
 from argparse import Namespace
 from datetime import datetime
+from collections import defaultdict
 import os.path
 from termcolor import colored as clr
 from .common.experiment_info import is_experiment
 from .common.options_parser import OptionParser
+from .common import LIFTOFF_FILES
 
 
 def parse_options(strict: bool = True) -> Namespace:
@@ -15,10 +17,36 @@ def parse_options(strict: bool = True) -> Namespace:
     """
 
     opt_parser = OptionParser(
-        "liftoff-clean", ["config_path", "do", "verbose", "timestamp_fmt"]
+        "liftoff-clean",
+        ["config_path", "do", "clean_all", "verbose", "timestamp_fmt"],
     )
 
     return opt_parser.parse_args(strict=strict)
+
+
+def find_experiment_products(run_path):
+    """ Find files that might be produced by an experiment, including but not
+    limited to logs, tensorboard events, models, pickle binaries.
+    """
+    experiment_products = []
+    with os.scandir(run_path) as fit:
+        for entry in fit:
+            if entry.name not in LIFTOFF_FILES and entry.is_file:
+                experiment_products.append(entry)
+    return experiment_products
+
+
+def maybe_remove_all(opts, run_path, prefix, info, lines):
+    """ Simulates, removes files provided by `find_experiment_products` and
+    updates info.
+    """
+    product_paths = find_experiment_products(run_path)
+    for entry in product_paths:
+        info[entry.name] += 1
+        if opts.do:
+            os.remove(entry.path)
+            lines.append(f"{prefix:s} Deleted {entry.name}\n")
+    return info, lines
 
 
 def clean_run(run_path, info, prefix, opts):
@@ -30,12 +58,8 @@ def clean_run(run_path, info, prefix, opts):
     end_path = os.path.join(run_path, ".__end")
 
     lines = []
-    lockers = info["lockers"]
     if os.path.exists(lock_path):
         info["nlocks"] += 1
-        with open(lock_path, "r") as lock:
-            session_id = lock.read().strip()
-        lockers[session_id] = lockers.get(session_id, 0) + 1
         if opts.do:
             os.remove(lock_path)
         lines.append(f"{prefix:s} Deleted {lock_path}\n")
@@ -49,7 +73,9 @@ def clean_run(run_path, info, prefix, opts):
         if opts.do:
             os.remove(start_path)
         lines.append(f"{prefix:s} Deleted {start_path}\n")
-
+        # removes all the non-liftoff files in the experiment run
+        if opts.clean_all:
+            info, lines = maybe_remove_all(opts, run_path, prefix, info, lines)
     if opts.verbose and opts.verbose > 0:
         for line in lines:
             print(line, end="")
@@ -61,7 +87,7 @@ def clean_run(run_path, info, prefix, opts):
 def clean_experiment(opts):
     """ Clean a specific argument
     """
-    info = {"nlocks": 0, "nstarted": 0, "ncrashed": 0, "lockers": dict({})}
+    info = defaultdict(int)
 
     experiment_path = opts.experiment_path
 
@@ -83,6 +109,11 @@ def clean_experiment(opts):
         f"{info['nstarted']:d} .__start files removed "
         f"(not corresponding .__end or .__crash)"
     )
+    if opts.clean_all:
+        print("\nFiles produced by the experiment run: ")
+        for key, val in info.items():
+            if key not in ["nlocks", "ncrashed", "nstarted"]:
+                print(f"{val:d} {key} files removed.")
 
     if not opts.do:
         print(
