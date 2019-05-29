@@ -182,6 +182,14 @@ class OptionParser:
             help="Script to be executed with all those configs.",
         )
 
+    def _add_clean_all(self) -> None:
+        self.arg_parser.add_argument(
+            "--clean-all",
+            action="store_true",
+            dest="clean_all",
+            help="Clean *all* the files an experiment run produced.",
+        )
+
     def _add_timestamp_fmt(self) -> None:
         default_value = self.liftoff_config.get("timestamp_fmt")
         if default_value is None:
