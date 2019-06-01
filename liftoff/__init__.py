@@ -4,6 +4,7 @@
 import yaml
 from .common.dict_utils import dict_to_namespace
 from .common.options_parser import OptionParser
+from .version import __version__ # pylint: disable=import-error
 
 
 def parse_opts():
