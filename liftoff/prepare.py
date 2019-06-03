@@ -30,6 +30,7 @@ from typing import List
 import pyperclip
 from termcolor import colored as clr
 import yaml
+import re
 
 from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
 from .common.options_parser import OptionParser
@@ -395,16 +396,25 @@ def prepare_experiment(opts):
 
             if opts.verbose and opts.verbose > 0:
                 print(f"Sub-xperiment {title} already", clr("exists", "green"))
+
+            # Extract config id
+            match_cfg_id = re.match("^(\d+.)_", existing[cfg_hash])
+            assert match_cfg_id, "Can not extract config experiment id"
+            crt_cfg_id = int(match_cfg_id.group(1))
+
             path_parts = [opts.experiment_path, existing[cfg_hash]]
             subexperiment_path = os.path.join(*path_parts)
             existing_se += 1
         else:
+            crt_cfg_id = start_idx
+
             candidate_name = safe_file_name(f"{start_idx:04d}_{title:s}")
             if len(candidate_name) < 255:
                 path_parts = [opts.experiment_path, candidate_name]
             else:
                 hash_name = safe_file_name(f"{start_idx:04d}_{cfg_hash:s}")
                 path_parts = [opts.experiment_path, hash_name]
+
             subexperiment_path = os.path.join(*path_parts)
             if opts.do:
                 os.mkdir(subexperiment_path)
@@ -445,6 +455,7 @@ def prepare_experiment(opts):
                 run_cfg = deepcopy(full_cfg)
                 run_cfg["out_dir"] = run_path
                 run_cfg["run_id"] = run_id
+                run_cfg["cfg_id"] = crt_cfg_id
                 run_cfg["title"] = title
                 if exp_cfg:
                     run_cfg["experiment_arguments"] = exp_cfg
