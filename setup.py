@@ -5,9 +5,16 @@
 
 from setuptools import setup, find_packages
 
+
+VERSION = '0.3.0' # single source of truth
+print('-- Installing liftoff ' + VERSION)
+with open("./liftoff/version.py", 'w') as f:
+    f.write("__version__ = '{}'\n".format(VERSION))
+
+
 setup(
     name="liftoff",
-    version="0.3",
+    version=VERSION,
     description="Experiment launcher; AGI assistant",
     entry_points={
         "console_scripts": [
