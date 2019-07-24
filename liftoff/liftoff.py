@@ -29,7 +29,9 @@ class LiftoffResources:
 
         if self.gpus:
             if len(opts.gpus) == len(opts.per_gpu):
-                self.per_gpu = {g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)}
+                self.per_gpu = {
+                    g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)
+                }
             elif len(opts.per_gpu) == 1:
                 self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
@@ -104,8 +106,9 @@ def some_run_path(experiment_path):
                             return run_path
     return None
 
+
 def should_stop(experiment_path):
-    return os.path.exists(os.paht.join(experiment_path, ".STOP")):
+    return os.path.exists(os.paht.join(experiment_path, ".STOP"))
 
 
 def parse_options() -> Namespace:
@@ -121,7 +124,7 @@ def parse_options() -> Namespace:
             "gpus",
             "per_gpu",
             "verbose",
-            "copy_to_clipboard"
+            "copy_to_clipboard",
         ],
     )
     return opt_parser.parse_args()
@@ -312,6 +315,7 @@ def get_function(opts: Namespace) -> Callable[[Namespace], None]:
 def run_here(opts):
     from .prepare import parse_options as prepare_parse_options
     from .prepare import prepare_experiment
+
     prep_args = [opts.config_path, "--do"]
     if opts.copy_to_clipboard:
         prep_args.append("--cc")
