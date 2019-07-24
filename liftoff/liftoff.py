@@ -108,7 +108,9 @@ def some_run_path(experiment_path):
 
 
 def should_stop(experiment_path):
-    return os.path.exists(os.paht.join(experiment_path, ".STOP"))
+    """ Checks if liftoff should exit no mather how much is left to run.
+    """
+    return os.path.exists(os.path.join(experiment_path, ".STOP"))
 
 
 def parse_options() -> Namespace:
