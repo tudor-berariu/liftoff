@@ -104,6 +104,9 @@ def some_run_path(experiment_path):
                             return run_path
     return None
 
+def should_stop(experiment_path):
+    return os.path.exists(os.paht.join(experiment_path, ".STOP")):
+
 
 def parse_options() -> Namespace:
     """ Parse command line arguments and liftoff configuration.
@@ -220,6 +223,10 @@ def launch_experiment(opts):
             if do_sleep:
                 time.sleep(1)
             available, next_gpu = resources.is_free()
+
+        if should_stop(opts.experiment_path):
+            print("We'll exit once running procs are over.")
+            break
 
         run_path = some_run_path(opts.experiment_path)
 
