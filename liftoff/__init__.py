@@ -1,10 +1,11 @@
 """ Liftoff...
 """
 
+import os.path
 import yaml
 from .common.dict_utils import dict_to_namespace
 from .common.options_parser import OptionParser
-from .version import __version__ # pylint: disable=import-error
+from .version import __version__  # pylint: disable=import-error
 
 
 def parse_opts():
@@ -18,8 +19,6 @@ def parse_opts():
               from liftoff import parse_opts()
               main(parse_opts())
     """
-
-    import os.path
 
     opt_parser = OptionParser("liftoff", ["config_path", "session_id"])
     opts = opt_parser.parse_args()

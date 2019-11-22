@@ -17,6 +17,8 @@ import yaml
 from .common.dict_utils import dict_to_namespace
 from .common.experiment_info import is_experiment, is_yaml
 from .common.options_parser import OptionParser
+from .prepare import parse_options as prepare_parse_options
+from .prepare import prepare_experiment
 
 
 class LiftoffResources:
@@ -29,9 +31,7 @@ class LiftoffResources:
 
         if self.gpus:
             if len(opts.gpus) == len(opts.per_gpu):
-                self.per_gpu = {
-                    g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)
-                }
+                self.per_gpu = {g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)}
             elif len(opts.per_gpu) == 1:
                 self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
@@ -74,6 +74,17 @@ class LiftoffResources:
         if self.gpus:
             self.gpu_running_procs[gpu] += 1
         self.running_procs += 1
+
+    @property
+    def state(self):
+        """ Returns the state of the computing resources.
+        """
+        msg = f"Procs: {self.running_procs} / {self.procs_no}"
+        if self.gpus:
+            msg += f" | {len(self.gpus):d} GPUS:"
+            for gpu in self.gpus:
+                msg += f" {gpu}: {self.gpu_running_procs[gpu]} / {self.per_gpu[gpu]};"
+        return msg
 
 
 def some_run_path(experiment_path):
@@ -136,7 +147,7 @@ def get_command_for_pid(pid: int) -> str:
     """ Returns the command for a pid if that process exists.
     """
     result = subprocess.run(
-        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
+        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True, check=True
     )
     return result.stdout.decode("utf-8").strip()
 
@@ -161,6 +172,9 @@ def lock_file(lock_path: str, session_id: str) -> bool:
 
 
 def launch_run(run_path, py_script, session_id, gpu=None):
+    """ Here we launch a run from an experiment.
+        This might be the most important function here.
+    """
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
     nohup_err_path = os.path.join(run_path, "nohup.err")
@@ -211,6 +225,7 @@ def launch_experiment(opts):
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
     while True:
+        print(f"Resource status: {resources.state}")
         available, next_gpu = resources.is_free()
         while not available:
             still_active_pids = []
@@ -242,9 +257,7 @@ def launch_experiment(opts):
         lock_path = os.path.join(run_path, ".__lock")
 
         if lock_file(lock_path, opts.session_id):
-            info = launch_run(
-                run_path, opts.script, opts.session_id, gpu=next_gpu
-            )
+            info = launch_run(run_path, opts.script, opts.session_id, gpu=next_gpu)
             active_pids.append(info + (lock_path,))
             resources.allocate(gpu=next_gpu)
 
@@ -315,9 +328,6 @@ def get_function(opts: Namespace) -> Callable[[Namespace], None]:
 
 
 def run_here(opts):
-    from .prepare import parse_options as prepare_parse_options
-    from .prepare import prepare_experiment
-
     prep_args = [opts.config_path, "--do"]
     if opts.copy_to_clipboard:
         prep_args.append("--cc")
@@ -357,4 +367,3 @@ def launch() -> None:
         run_here(opts)
     else:
         raise NotImplementedError
-

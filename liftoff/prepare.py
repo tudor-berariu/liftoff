@@ -25,12 +25,12 @@ from datetime import datetime
 from copy import copy, deepcopy
 import itertools
 import os.path
+import re
 import string
 from typing import List
 import pyperclip
 from termcolor import colored as clr
 import yaml
-import re
 
 from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
 from .common.options_parser import OptionParser
@@ -398,7 +398,7 @@ def prepare_experiment(opts):
                 print(f"Sub-xperiment {title} already", clr("exists", "green"))
 
             # Extract config id
-            match_cfg_id = re.match("^(\d+.)_", existing[cfg_hash])
+            match_cfg_id = re.match(r"^(\d+)_", existing[cfg_hash])
             assert match_cfg_id, "Can not extract config experiment id"
             crt_cfg_id = int(match_cfg_id.group(1))
 
