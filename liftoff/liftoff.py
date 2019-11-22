@@ -146,10 +146,13 @@ def parse_options() -> Namespace:
 def get_command_for_pid(pid: int) -> str:
     """ Returns the command for a pid if that process exists.
     """
-    result = subprocess.run(
-        f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True, check=True
-    )
-    return result.stdout.decode("utf-8").strip()
+    try:
+        result = subprocess.run(
+            f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True, check=True
+        )
+        return result.stdout.decode("utf-8").strip()
+    except subprocess.CalledProcessError as _e:
+        return ""
 
 
 def still_active(pid: int, cmd: str) -> bool:
@@ -227,6 +230,7 @@ def launch_experiment(opts):
     while True:
         print(f"Resource status: {resources.state}")
         available, next_gpu = resources.is_free()
+        print(f"Free: {available}, {next_gpu}")
         while not available:
             still_active_pids = []
             do_sleep = True
