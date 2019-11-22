@@ -172,6 +172,8 @@ def lock_file(lock_path: str, session_id: str) -> bool:
         return True
     except FileExistsError:
         return False
+    except BlockingIOError:
+        sys.stderr.write(f"Some problem while locking {lock_path}!\n")
 
 
 def launch_run(run_path, py_script, session_id, gpu=None):
