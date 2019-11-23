@@ -86,6 +86,13 @@ class OptionParser:
             help="Apply the actions (do not only simulate).",
         )
 
+    def _add_crashed_only(self) -> None:
+        self.arg_parser.add_argument(
+            "--crashed-only",
+            action="store_true",
+            dest="crashed_only",
+            help="Apply the actions only to crashed subexperiments.",
+        )
     def _add_experiment(self) -> None:
         self.arg_parser.add_argument(
             "experiment",
@@ -114,6 +121,15 @@ class OptionParser:
             action="store_true",
             dest="overwrite",
             help="Overwrite files if you find them (not if .__end is there",
+        )
+
+    
+    def _add_no_detach(self) -> None:
+        self.arg_parser.add_argument(
+            "--no-detach",
+            action="store_true",
+            dest="no_detach",
+            help="Do not detach the process with nohup.",
         )
 
     def _add_per_gpu(self) -> None:

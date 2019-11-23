@@ -83,7 +83,7 @@ class LiftoffResources:
         if self.gpus:
             msg += f" | {len(self.gpus):d} GPUS:"
             for gpu in self.gpus:
-                msg += f" {gpu}: {self.gpu_running_procs[gpu]} / {self.per_gpu[gpu]};"
+                msg += f" {gpu}:{self.gpu_running_procs[gpu]}/{self.per_gpu[gpu]};"
         return msg
 
 
@@ -136,6 +136,7 @@ def parse_options() -> Namespace:
             "procs_no",
             "gpus",
             "per_gpu",
+            "no_detach",
             "verbose",
             "copy_to_clipboard",
         ],
@@ -176,14 +177,14 @@ def lock_file(lock_path: str, session_id: str) -> bool:
         sys.stderr.write(f"Some problem while locking {lock_path}!\n")
 
 
-def launch_run(run_path, py_script, session_id, gpu=None):
+def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
     """ Here we launch a run from an experiment.
         This might be the most important function here.
     """
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
-    nohup_err_path = os.path.join(run_path, "nohup.err")
-    nohup_out_path = os.path.join(run_path, "nohup.out")
+    wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
+    wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.err")
     cfg_path = os.path.join(run_path, "cfg.yaml")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
@@ -198,17 +199,29 @@ def launch_run(run_path, py_script, session_id, gpu=None):
 
     py_cmd = f"python -u {py_script:s} {cfg_path:s} --session-id {session_id}"
 
-    cmd = (
-        f" date +%s 1> {start_path:s} 2>/dev/null &&"
-        + f" nohup sh -c '{env_vars:s} {py_cmd:s}"
-        + f" 2>{err_path:s} 1>{out_path:s}"
-        + f" && date +%s > {end_path:s}"
-        + f" || date +%s > {crash_path:s}'"
-        + f" 1> {nohup_out_path} 2> {nohup_err_path}"
-        + f" & echo $!"
-    )
+    if do_nohup:
+        cmd = (
+            f" date +%s 1> {start_path:s} 2>/dev/null &&"
+            + f" nohup sh -c '{env_vars:s} {py_cmd:s}"
+            + f" 2>{err_path:s} 1>{out_path:s}"
+            + f" && date +%s > {end_path:s}"
+            + f" || date +%s > {crash_path:s}'"
+            + f" 1> {wrap_out_path} 2> {wrap_err_path}"
+            + f" & echo $!"
+        )
+    else:
+        cmd = (
+            f" date +%s 1> {start_path:s} 2>/dev/null &&"
+            + f" sh -c '{env_vars:s} {py_cmd:s}"
+            + f" 2>{err_path:s} 1>{out_path:s}"
+            + f" && date +%s > {end_path:s}"
+            + f" || date +%s > {crash_path:s}'"
+            + f" 1> {wrap_out_path} 2> {wrap_err_path}"
+            + f" & echo $!"
+        )
 
     print(f"Command to be run:\n{cmd:s}")
+    sys.stdout.flush()
 
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
@@ -219,7 +232,7 @@ def launch_run(run_path, py_script, session_id, gpu=None):
         print(f"Some error: {clr(err, 'red'):s}.")
     pid = int(out.decode("utf-8").strip())
     print(f"New PID is {pid:d}.")
-
+    sys.stdout.flush()
     return pid, gpu, title, py_cmd
 
 
@@ -227,10 +240,11 @@ def launch_experiment(opts):
     resources = LiftoffResources(opts)
     active_pids = []
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
+
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
     while True:
-        print(f"Resource status: {resources.state}")
+        print("Resources:", resources.state)
         available, next_gpu = resources.is_free()
         print(f"Free: {available}, {next_gpu}")
         while not available:
@@ -263,7 +277,13 @@ def launch_experiment(opts):
         lock_path = os.path.join(run_path, ".__lock")
 
         if lock_file(lock_path, opts.session_id):
-            info = launch_run(run_path, opts.script, opts.session_id, gpu=next_gpu)
+            info = launch_run(
+                run_path,
+                opts.script,
+                opts.session_id,
+                gpu=next_gpu,
+                do_nohup=not opts.no_detach,
+            )
             active_pids.append(info + (lock_path,))
             resources.allocate(gpu=next_gpu)
 
@@ -334,6 +354,9 @@ def get_function(opts: Namespace) -> Callable[[Namespace], None]:
 
 
 def run_here(opts):
+    """ If there's a single run in the experiment we run it in this process by
+        calling run in the script.
+    """
     prep_args = [opts.config_path, "--do"]
     if opts.copy_to_clipboard:
         prep_args.append("--cc")
@@ -359,6 +382,13 @@ def run_here(opts):
                         get_function(opts)(args)
 
 
+def check_opts_integrity(opts):
+    """ Here we do some checks...
+    """
+    if opts.no_detach and opts.procs_no != 1:
+        raise ValueError("No detach mode only for single processes")
+
+
 def launch() -> None:
     """ Main function.
     """
@@ -366,6 +396,7 @@ def launch() -> None:
 
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
+        check_opts_integrity(opts)
         launch_experiment(opts)
     elif is_yaml(opts.config_path):
         if opts.gpus:

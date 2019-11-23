@@ -205,30 +205,14 @@ Namespace (`run`).
 
 
 ```python
-def run(args: Args) -> None:
+def run(opts):
     ...
 
 
 def main():
-
-# Reading args
-from liftoff.config import read_config
-    args = read_config()  # type: Args
-
-    if not hasattr(args, "out_dir"):
-        from time import time
-        if not os.path.isdir('./results'):
-            os.mkdir('./results')
-        out_dir = f'./results/{str(int(time())):s}_{args.experiment:s}'
-        os.mkdir(out_dir)
-        args.out_dir = out_dir
-    else:
-        assert os.path.isdir(args.out_dir), "Given directory does not exist"
-
-    if not hasattr(args, "run_id"):
-        args.run_id = 0
-
-    run(args)
+    from liftoff import parse_opts
+    opts = parse_opts()
+    run(opts)
 
 
 if __name__ == "__main__":
