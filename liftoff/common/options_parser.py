@@ -48,7 +48,8 @@ class OptionParser:
 
     def _add_all(self) -> None:
         self.arg_parser.add_argument(
-            "-a", "--all",
+            "-a",
+            "--all",
             action="store_true",
             dest="all",
             help="Target all experiments not just the latest.",
@@ -68,14 +69,12 @@ class OptionParser:
             "--cc",
             action="store_true",
             dest="copy_to_clipboard",
-            help="Copy experiment path to clipboard"
+            help="Copy experiment path to clipboard",
         )
 
     def _add_config_path(self) -> None:
         self.arg_parser.add_argument(
-            "config_path",
-            type=str,
-            help="Give a specific name to the experiment.",
+            "config_path", type=str, help="Give a specific name to the experiment."
         )
 
     def _add_do(self) -> None:
@@ -93,6 +92,7 @@ class OptionParser:
             dest="crashed_only",
             help="Apply the actions only to crashed subexperiments.",
         )
+
     def _add_experiment(self) -> None:
         self.arg_parser.add_argument(
             "experiment",
@@ -123,7 +123,6 @@ class OptionParser:
             help="Overwrite files if you find them (not if .__end is there",
         )
 
-    
     def _add_no_detach(self) -> None:
         self.arg_parser.add_argument(
             "--no-detach",
@@ -143,11 +142,7 @@ class OptionParser:
         )
 
     def _add_pid(self) -> None:
-        self.arg_parser.add_argument(
-            "pid",
-            type=int,
-            help="PID of liftoff to kill.",
-        )
+        self.arg_parser.add_argument("pid", type=int, help="PID of liftoff to kill.")
 
     def _add_procs_no(self) -> None:
         default_value = self.liftoff_config.get("procs_no")
@@ -193,9 +188,7 @@ class OptionParser:
 
     def _add_script(self) -> None:
         self.arg_parser.add_argument(
-            "script",
-            type=str,
-            help="Script to be executed with all those configs.",
+            "script", type=str, help="Script to be executed with all those configs."
         )
 
     def _add_clean_all(self) -> None:
@@ -236,4 +229,13 @@ class OptionParser:
             dest="session_id",
             required=True,
             help="Seesion id (needed to identify process by command).",
+        )
+
+    def _add_timelimit(self) -> None:
+        self.arg_parser.add_argument(
+            "--time-limit",
+            type=int,
+            dest="time_limit",
+            default=0,
+            help="Stop if this time limit (in miuntes) is exceeded.",
         )

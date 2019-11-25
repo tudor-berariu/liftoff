@@ -9,6 +9,7 @@ import os.path
 import subprocess
 import sys
 import time
+from time import perf_counter
 import traceback
 from typing import Callable, List
 from termcolor import colored as clr
@@ -139,6 +140,7 @@ def parse_options() -> Namespace:
             "no_detach",
             "verbose",
             "copy_to_clipboard",
+            "time_limit",
         ],
     )
     return opt_parser.parse_args()
@@ -241,6 +243,8 @@ def launch_experiment(opts):
     active_pids = []
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
 
+    start = perf_counter()
+
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
     while True:
@@ -266,6 +270,10 @@ def launch_experiment(opts):
 
         if should_stop(opts.experiment_path):
             print("We'll exit once running procs are over.")
+            break
+
+        if opts.time_limit > 0 and (perf_counter() - start) > (opts.time_limit * 60.0):
+            print("Time limit exceeded. Ending as soon as running procs are over.")
             break
 
         run_path = some_run_path(opts.experiment_path)
