@@ -231,7 +231,7 @@ class OptionParser:
             help="Seesion id (needed to identify process by command).",
         )
 
-    def _add_timelimit(self) -> None:
+    def _add_time_limit(self) -> None:
         self.arg_parser.add_argument(
             "--time-limit",
             type=int,
