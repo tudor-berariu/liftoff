@@ -222,7 +222,7 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
             + f" & echo $!"
         )
 
-    print(f"Command to be run:\n{cmd:s}")
+    print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
     sys.stdout.flush()
 
     proc = subprocess.Popen(
@@ -231,9 +231,9 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
     (out, err) = proc.communicate()
     err = err.decode("utf-8").strip()
     if err:
-        print(f"Some error: {clr(err, 'red'):s}.")
+        print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
     pid = int(out.decode("utf-8").strip())
-    print(f"New PID is {pid:d}.")
+    print(f"[{time.strftime(time.ctime())}] New PID is {pid:d}.")
     sys.stdout.flush()
     return pid, gpu, title, py_cmd
 
@@ -248,9 +248,9 @@ def launch_experiment(opts):
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
     while True:
-        print("Resources:", resources.state)
+        print(f"[{time.strftime(time.ctime())}] Resources:", resources.state)
         available, next_gpu = resources.is_free()
-        print(f"Free: {available}, {next_gpu}")
+        print(f"[{time.strftime(time.ctime())}] Free??: {available}, {next_gpu}")
         while not available:
             still_active_pids = []
             do_sleep = True
@@ -259,7 +259,7 @@ def launch_experiment(opts):
                 if still_active(pid, cmd):
                     still_active_pids.append(info)
                 else:
-                    print(f"> {title} seems to be over.")
+                    print(f"[{time.strftime(time.ctime())}] {title} seems to be over.")
                     os.remove(lock_path)
                     resources.free(gpu=gpu)
                     do_sleep = False
@@ -269,20 +269,25 @@ def launch_experiment(opts):
             available, next_gpu = resources.is_free()
 
         if should_stop(opts.experiment_path):
-            print("We'll exit once running procs are over.")
+            print(f"[{time.strftime(time.ctime())}] Exit once running procs are over.")
             break
 
         if opts.time_limit > 0 and (perf_counter() - start) > (opts.time_limit * 60.0):
-            print("Time limit exceeded. Ending as soon as running procs are over.")
+            print(
+                f"[{time.strftime(time.ctime())}] Time limit exceeded. "
+                "Ending as soon as running procs are over."
+            )
             break
 
         path_start = perf_counter()
         run_path = some_run_path(opts.experiment_path)
         path_delta = perf_counter() - path_start
-        print(f"Path search took like {path_delta:.3f} seconds.")
+        print(
+            f"[{time.strftime(time.ctime())}] Path search took like {path_delta:.3f} s."
+        )
 
         if run_path is None:
-            print("Nothing more to run here.")
+            print(f"[{time.strftime(time.ctime())}] Nothing more to run here.")
             break
 
         lock_path = os.path.join(run_path, ".__lock")
@@ -306,7 +311,7 @@ def launch_experiment(opts):
             if still_active(pid, cmd):
                 still_active_pids.append(info)
             else:
-                print(f"> {title} seems to be over.")
+                print(f"[{time.strftime(time.ctime())}] > {title} seems to be over.")
                 os.remove(lock_path)
                 resources.free(gpu=gpu)
                 do_sleep = False
@@ -315,7 +320,10 @@ def launch_experiment(opts):
             time.sleep(1)
 
     duration = perf_counter() - start
-    msg = f"Experiment {opts.experiment_path} ended after {duration:.2f}s."
+    msg = (
+        f"[{time.strftime(time.ctime())}] "
+        f"Experiment {opts.experiment_path} ended after {duration:.2f}s."
+    )
     print(clr(msg, attrs=["bold"]))
     os.remove(pid_path)
 
