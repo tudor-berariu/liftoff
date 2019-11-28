@@ -186,7 +186,7 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
     wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
-    wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.err")
+    wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
     cfg_path = os.path.join(run_path, "cfg.yaml")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
@@ -218,7 +218,7 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
             + f" 2>{err_path:s} 1>{out_path:s}"
             + f" && date +%s > {end_path:s}"
             + f" || date +%s > {crash_path:s}'"
-            + f" 1> {wrap_out_path} 2> {wrap_err_path}"
+            + f" 1>{wrap_out_path} 2>{wrap_err_path}"
             + f" & echo $!"
         )
 
@@ -276,7 +276,10 @@ def launch_experiment(opts):
             print("Time limit exceeded. Ending as soon as running procs are over.")
             break
 
+        path_start = perf_counter()
         run_path = some_run_path(opts.experiment_path)
+        path_delta = perf_counter() - path_start
+        print(f"Path search took like {path_delta:.3f} seconds.")
 
         if run_path is None:
             print("Nothing more to run here.")
