@@ -314,7 +314,9 @@ def launch_experiment(opts):
         if do_sleep:
             time.sleep(1)
 
-    print(clr(f"Experiment {opts.experiment_path} ended.", attrs=["bold"]))
+    duration = perf_counter() - start
+    msg = f"Experiment {opts.experiment_path} ended after {duration:.2f}s."
+    print(clr(msg, attrs=["bold"]))
     os.remove(pid_path)
 
 
