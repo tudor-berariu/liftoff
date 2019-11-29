@@ -92,7 +92,8 @@ def some_run_path(experiment_path):
     """ So we have that experiment path and we ask for a single subexperiment
         we might run now.
     """
-
+    must_be = ["cfg.yaml", ".__leaf"]
+    must_not_be = [".__lock", ".__crash", ".__end", ".__start"]
     with os.scandir(experiment_path) as fit:
         for entry in fit:
             if not entry.name.startswith(".") and entry.is_dir():
@@ -101,22 +102,18 @@ def some_run_path(experiment_path):
                     for entry2 in fit2:
                         if not entry2.name.startswith(".") and entry2.is_dir():
                             run_path = os.path.join(subexp_path, entry2.name)
-                            cfg_path = os.path.join(run_path, "cfg.yaml")
-                            crash_path = os.path.join(run_path, ".__crash")
-                            end_path = os.path.join(run_path, ".__end")
-                            leaf_path = os.path.join(run_path, ".__leaf")
-                            lock_path = os.path.join(run_path, ".__lock")
-                            must_be = [cfg_path, leaf_path]
-                            must_not_be = [crash_path, end_path, lock_path]
-
-                            if any(not os.path.exists(f) for f in must_be):
+                            done_before = False
+                            mandatory_files = []
+                            with os.scandir(run_path) as fit3:
+                                for entry3 in fit3:
+                                    if entry3.name in must_not_be:
+                                        done_before = True
+                                        break
+                                    if entry3.name in must_be:
+                                        mandatory_files.append(entry3.name)
+                            if done_before or set(mandatory_files) != set(must_be):
                                 continue
-
-                            if any(os.path.exists(f) for f in must_not_be):
-                                continue
-
-                            return run_path
-    return None
+                            yield run_path
 
 
 def should_stop(experiment_path):
@@ -280,28 +277,34 @@ def launch_experiment(opts):
             break
 
         path_start = perf_counter()
-        run_path = some_run_path(opts.experiment_path)
-        path_delta = perf_counter() - path_start
-        print(
-            f"[{time.strftime(time.ctime())}] Path search took like {path_delta:.3f} s."
-        )
-
-        if run_path is None:
-            print(f"[{time.strftime(time.ctime())}] Nothing more to run here.")
-            break
-
-        lock_path = os.path.join(run_path, ".__lock")
-
-        if lock_file(lock_path, opts.session_id):
-            info = launch_run(
-                run_path,
-                opts.script,
-                opts.session_id,
-                gpu=next_gpu,
-                do_nohup=not opts.no_detach,
+        attempt = 0
+        success = False
+        for run_path in some_run_path(opts.experiment_path):
+            attempt += 1
+            lock_path = os.path.join(run_path, ".__lock")
+            if lock_file(lock_path, opts.session_id):
+                path_delta = perf_counter() - path_start
+                print(
+                    f"[{time.strftime(time.ctime())}] Path search took "
+                    f"{path_delta:.3f} s. ({attempt:d} attempts)"
+                )
+                success = True
+                info = launch_run(
+                    run_path,
+                    opts.script,
+                    opts.session_id,
+                    gpu=next_gpu,
+                    do_nohup=not opts.no_detach,
+                )
+                active_pids.append(info + (lock_path,))
+                resources.allocate(gpu=next_gpu)
+                break
+        if not success:
+            print(
+                f"[{time.strftime(time.ctime())}] "
+                "All subexperiments are done / running."
             )
-            active_pids.append(info + (lock_path,))
-            resources.allocate(gpu=next_gpu)
+            break
 
     while active_pids:
         still_active_pids = []

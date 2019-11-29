@@ -5,6 +5,7 @@ from argparse import Namespace
 from collections import OrderedDict
 import datetime
 import os.path
+import sys
 import time
 from typing import List
 from tabulate import tabulate
@@ -61,13 +62,19 @@ def experiment_status(experiment_path):
 
                             if os.path.isfile(end_path):
                                 with open(end_path) as end_file:
-                                    end_time = int(end_file.readline().strip())
-                                    durations.append(end_time - start_time)
+                                    try:
+                                        end_time = int(end_file.readline().strip())
+                                        durations.append(end_time - start_time)
+                                    except ValueError as _ex:
+                                        sys.stderr.write(f"Error with {crash_path}.\n")
                                 nended += 1
                             elif os.path.isfile(crash_path):
                                 with open(crash_path) as end_file:
-                                    end_time = int(end_file.readline().strip())
-                                    durations.append(end_time - start_time)
+                                    try:
+                                        end_time = int(end_file.readline().strip())
+                                        durations.append(end_time - start_time)
+                                    except ValueError as _ex:
+                                        sys.stderr.write(f"Error with {crash_path}.\n")
                                 ncrashed += 1
                             elif os.path.isfile(lock_path):
                                 nlocked += 1
