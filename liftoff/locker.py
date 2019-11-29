@@ -23,6 +23,34 @@ def parse_options(strict: bool = True) -> Namespace:
     return opt_parser.parse_args(strict=strict)
 
 
+def unlock_run(run_path, info, prefix, opts):
+    """ Unlock a run if possible.
+    """
+    lines = []
+    existing_files = os.listdir(run_path)
+
+    if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
+        info["nstrange"] += 1
+        return
+
+    if ".__seal" not in existing_files:
+        return
+
+    if ".__lock" in existing_files:
+        info["nlocks"] += 1
+        if opts.do:
+            os.remove(os.path.join(run_path, ".__lock"))
+
+    if opts.do:
+        os.remove(os.path.join(run_path, ".__seal"))
+
+    lines.append(f"{prefix:s} Unlocked and unsealed {run_path}.\n")
+
+    if opts.do:
+        with open(os.path.join(run_path, ".__journal"), "a") as j_hndlr:
+            j_hndlr.writelines(lines)
+
+
 def lock_run(run_path, info, prefix, opts):
     """ Lock a run if possible.
     """
@@ -43,7 +71,7 @@ def lock_run(run_path, info, prefix, opts):
         if lock_file(os.path.join(run_path, ".__lock"), opts.session_id):
             with open(os.path.join(run_path, ".__seal"), "w") as hndlr:
                 hndlr.write(f"{opts.session_id}\n")
-            lines.append(f"{prefix:s} Locked and sealed.\n")
+            lines.append(f"{prefix:s} Locked and sealed {run_path}.\n")
         else:
             info["nlocks"] -= 1
             info["nraced"] += 1
@@ -56,7 +84,7 @@ def lock_run(run_path, info, prefix, opts):
             j_hndlr.writelines(lines)
 
 
-def lock_experiment(opts):
+def lock_experiment(opts, unlock=False):
     """ Clean a specific argument
     """
     info = defaultdict(int)
@@ -76,28 +104,34 @@ def lock_experiment(opts):
                     try:
                         run_id = int(entry2.name)
                         if run_id in opts.runs:
-                            lock_run(entry2.path, info, prefix, opts)
+                            if unlock:
+                                unlock_run(entry2.path, info, prefix, opts)
+                            else:
+                                lock_run(entry2.path, info, prefix, opts)
                     except ValueError:
                         pass
-
-    print(f"{info['nlocks']:d} .__lock files added")
-    print(f"{info['nraced']:d} times we just lost the .__lock to some other process")
-    print(f"{info['nstarted']:d} runs were already started")
-    print(f"{info['nstrange']:d} strange folders")
+    if unlock:
+        print(f"{info['nlocks']:d} .__lock files deleted")
+        print(f"{info['nstrange']:d} strange folders")
+    else:
+        print(f"{info['nlocks']:d} .__lock files added")
+        print(f"{info['nraced']:d} times just lost the .__lock to some other process")
+        print(f"{info['nstarted']:d} runs were already started")
+        print(f"{info['nstrange']:d} strange folders")
 
     if not opts.do:
         print(
             "\nThis was just a simultation. Rerun with",
             clr("--do", attrs=["bold"]),
-            "to clean the experiment for real.",
+            "to lock/unlock the experiment for real.",
         )
 
 
-def lock():
-    """ Main function for liftoff-clean.
+def lock(unlock=False):
+    """ Main function for liftoff-lock.
     """
     opts = parse_options()
     if not is_experiment(opts.config_path):
         raise RuntimeError(f"{opts.config_path:s} is not a liftoff experiment")
     opts.experiment_path = opts.config_path
-    lock_experiment(opts)
+    lock_experiment(opts, unlock=unlock)

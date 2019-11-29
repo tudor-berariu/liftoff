@@ -25,6 +25,7 @@ setup(
             "liftoff-clean=liftoff.cmd:clean",
             "liftoff-status=liftoff.cmd:status",
             "liftoff-lock=liftoff.cmd:lock",
+            "liftoff-unlock=liftoff.cmd:unlock",
         ]
     },
     packages=find_packages(),
