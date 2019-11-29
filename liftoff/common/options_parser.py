@@ -186,6 +186,16 @@ class OptionParser:
             help="Number of runs for each sub-experiment",
         )
 
+    def _add_runs(self) -> None:
+        self.arg_parser.add_argument(
+            "--runs",
+            dest="runs",
+            required=True,
+            type=int,
+            nargs='+',
+            help="Runs we refer to here.",
+        )
+
     def _add_script(self) -> None:
         self.arg_parser.add_argument(
             "script", type=str, help="Script to be executed with all those configs."

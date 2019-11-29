@@ -1,5 +1,6 @@
 LIFTOFF_FILES = [
     ".__leaf",
+    ".__seal",
     ".__lock",
     ".__start",
     ".__end",
@@ -7,4 +8,3 @@ LIFTOFF_FILES = [
     ".__journal",
     "cfg.yaml",
 ]
-

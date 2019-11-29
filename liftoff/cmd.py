@@ -2,6 +2,7 @@
     console commands.
 """
 
+# pylint: disable=import-outside-toplevel
 
 def prepare():
     """ liftoff-prepare
@@ -61,3 +62,12 @@ def status():
 
     hello()
     _status()
+
+def lock():
+    """ liftoff-lock
+    """
+    from .common.local_info import hello
+    from .locker import lock as _lock
+
+    hello()
+    _lock()

@@ -175,6 +175,8 @@ def lock_file(lock_path: str, session_id: str) -> bool:
     except BlockingIOError:
         sys.stderr.write(f"Some problem while locking {lock_path}!\n")
 
+    return False
+
 
 def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
     """ Here we launch a run from an experiment.

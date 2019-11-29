@@ -56,10 +56,15 @@ def clean_run(run_path, info, prefix, opts):
     crash_path = os.path.join(run_path, ".__crash")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
+    seal_path = os.path.join(run_path, ".__seal")
 
     lines = []
 
     if opts.crashed_only and not os.path.exists(crash_path):
+        return
+
+    if os.path.exists(seal_path):
+        info["nsealed"] += 1
         return
 
     if os.path.exists(lock_path):
@@ -107,6 +112,7 @@ def clean_experiment(opts):
                         continue
                     clean_run(entry2.path, info, prefix, opts)
 
+    print(f"{info['nsealed']:d} runs are sealed.")
     print(f"{info['nlocks']:d} .__lock files removed")
     print(f"{info['ncrashed']:d} .__crashed files removed")
     print(
