@@ -82,6 +82,8 @@ def lock_experiment(opts):
 
     print(f"{info['nlocks']:d} .__lock files added")
     print(f"{info['nraced']:d} times we just lost the .__lock to some other process")
+    print(f"{info['nstarted']:d} runs were already started")
+    print(f"{info['nstrange']:d} strange folders")
 
     if not opts.do:
         print(
