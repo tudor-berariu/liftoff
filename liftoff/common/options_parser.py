@@ -64,6 +64,15 @@ class OptionParser:
             help="Append files to some existing experiment.",
         )
 
+    def _add_args(self) -> None:
+        self.arg_parser.add_argument(
+            "--args",
+            dest="args",
+            type=str,
+            nargs="*",
+            help="Use these values to overwrite the config file."
+        )
+
     def _add_copy_to_clipboard(self) -> None:
         self.arg_parser.add_argument(
             "--cc",
@@ -113,6 +122,14 @@ class OptionParser:
             required=False,
             type=str,
             help="Give a specific name to the experiment.",
+        )
+
+    def _add_optimize(self) -> None:
+        self.arg_parser.add_argument(
+            "-O",
+            action="store_true",
+            dest="optimize",
+            help="Send -OO to python process."
         )
 
     def _add_overwrite(self) -> None:

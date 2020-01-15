@@ -76,4 +76,3 @@ def dict_to_namespace(dct: dict) -> Namespace:
         else:
             setattr(namespace, name, value)
     return namespace
-

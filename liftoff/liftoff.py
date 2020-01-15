@@ -138,6 +138,8 @@ def parse_options() -> Namespace:
             "verbose",
             "copy_to_clipboard",
             "time_limit",
+            "optimize",
+            "args",
         ],
     )
     return opt_parser.parse_args()
@@ -178,7 +180,7 @@ def lock_file(lock_path: str, session_id: str) -> bool:
     return False
 
 
-def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
+def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False):
     """ Here we launch a run from an experiment.
         This might be the most important function here.
     """
@@ -198,7 +200,9 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True):
     if gpu is not None:
         env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
 
-    py_cmd = f"python -u {py_script:s} {cfg_path:s} --session-id {session_id}"
+    flags = "-u -OO" if optim else "-u"
+
+    py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
 
     if do_nohup:
         cmd = (
@@ -297,6 +301,7 @@ def launch_experiment(opts):
                     opts.session_id,
                     gpu=next_gpu,
                     do_nohup=not opts.no_detach,
+                    optim=opts.optimize,
                 )
                 active_pids.append(info + (lock_path,))
                 resources.allocate(gpu=next_gpu)
@@ -387,6 +392,7 @@ def run_here(opts):
     if opts.copy_to_clipboard:
         prep_args.append("--cc")
     prepare_opts = prepare_parse_options(prep_args)
+    prepare_opts.args = opts.args
     opts.experiment_path = prepare_experiment(prepare_opts)
 
     with os.scandir(opts.experiment_path) as fit:
@@ -411,6 +417,8 @@ def run_here(opts):
 def check_opts_integrity(opts):
     """ Here we do some checks...
     """
+    if opts.args:
+        raise ValueError("--args works for single experiment only; see liftoff-prepare")
     if opts.no_detach and opts.procs_no != 1:
         raise ValueError("No detach mode only for single processes")
 

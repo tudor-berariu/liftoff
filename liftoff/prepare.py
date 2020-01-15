@@ -283,12 +283,41 @@ def generate_combinations(cfg, _opts):
 
             yield (cfg, "; ".join(title))
 
+def update_config(cfg, args):
+    """ Here we assume we have a list of raw updates to be made to cfg.
+        e.g. ["model.hidden_units=32", "model.nonlinearity=relu", "model.droput=True"]
+
+        The function does not return some new configuration, but changes cfg in place.
+    """
+    assert isinstance(args, list)
+    assert all(len(arg.split("=")) == 2 for arg in args)
+
+    for arg in args:
+        keys, value = arg.split("=")
+        keys = keys.split(".")
+        crt_cfg = cfg
+        for key in keys[:-1]:
+            # crt_cfg = crt_cfg.setdefault(key, dict({}))  # better to print something
+            if key not in crt_cfg:
+                print(f"{key} not found at this level. A new entry will be created.")
+                crt_cfg = crt_cfg[key] = dict({})
+            else:
+                assert isinstance(crt_cfg[key], dict)
+                crt_cfg = crt_cfg[key]
+        try:
+            crt_cfg[keys[-1]] = type(crt_cfg[keys[-1]])(value)
+        except Exception as exception:  # pylint: disable=broad-except
+            print(exception)
+            crt_cfg[keys[-1]] = value
 
 def prepare_single_subexperiment(opts: Namespace):
     """ Here we add a single sub-experiment to an experiment.
     """
     with open(opts.config_path) as handler:
         config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+
+    if hasattr(opts, "args") and opts.args:
+        update_config(config_data, opts.args)
 
     title = os.path.basename(os.path.normpath(opts.config_path))
     if title.endswith(".yaml"):

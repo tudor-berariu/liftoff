@@ -11,7 +11,7 @@ def version():
     """ Is there a better way to have some unique source for the version?
         Should investigate.
     """
-    return "0.3"
+    return "0.3.1"
 
 
 def get_branch_commit(path: str):
