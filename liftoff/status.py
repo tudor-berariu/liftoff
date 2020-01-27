@@ -88,9 +88,12 @@ def experiment_status(experiment_path):
 
     if durations.size > 0:
         avg_time = np.mean(durations)  # Average time based on finished runs
-        # Here we limit the locked processes to the maximum known duration.
+        # Here we limit the locked processes to maximum two standard deviations above
+        # the mean known duration.
         # Without this a process locked and abandoned might add too much progress.
-        live_durations = live_durations.clip(0, np.max(durations))
+        # It's better to underestimate progress than to overestimate it. :)
+        mean, std = np.mean(durations), np.std(durations)
+        live_durations = live_durations.clip(0, mean + 2 * std)
     elif live_durations.size > 0:
         avg_time = np.mean(live_durations) * 2
     else:
