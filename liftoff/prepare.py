@@ -446,6 +446,8 @@ def prepare_experiment(opts):
                 hash_name = safe_file_name(f"{start_idx:04d}_{cfg_hash:s}")
                 path_parts = [opts.experiment_path, hash_name]
 
+            existing[cfg_hash] = path_parts[-1]
+
             subexperiment_path = os.path.join(*path_parts)
             if opts.do:
                 os.mkdir(subexperiment_path)
