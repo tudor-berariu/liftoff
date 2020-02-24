@@ -31,6 +31,7 @@ from typing import List
 import pyperclip
 from termcolor import colored as clr
 import yaml
+import glob
 
 from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
 from .common.options_parser import OptionParser
@@ -332,17 +333,18 @@ def prepare_multiple_subexperiments(opts):
     """
 
     default_path = os.path.join(opts.config_path, "default.yaml")
-    config_path = os.path.join(opts.config_path, "config.yaml")
-
-    with open(config_path) as handler:
-        config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+    config_path_pattern = os.path.join(opts.config_path, "config*.yaml")
 
     with open(default_path) as handler:
         default_data = yaml.load(handler, Loader=yaml.SafeLoader)
 
-    for exp_cfg, title in generate_combinations(config_data, opts):
-        full_cfg = deep_update_dict(deepcopy(default_data), exp_cfg)
-        yield full_cfg, title, exp_cfg
+    for config_path in glob.glob(config_path_pattern):
+        with open(config_path) as handler:
+            config_data = yaml.load(handler, Loader=yaml.SafeLoader)
+
+        for exp_cfg, title in generate_combinations(config_data, opts):
+            full_cfg = deep_update_dict(deepcopy(default_data), exp_cfg)
+            yield full_cfg, title, exp_cfg
 
 
 def prepare_experiment(opts):
