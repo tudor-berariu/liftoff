@@ -70,7 +70,7 @@ class OptionParser:
             dest="args",
             type=str,
             nargs="*",
-            help="Use these values to overwrite the config file."
+            help="Use these values to overwrite the config file.",
         )
 
     def _add_copy_to_clipboard(self) -> None:
@@ -110,6 +110,15 @@ class OptionParser:
             help="Give a specific name to the experiment.",
         )
 
+    def _add_filters(self) -> None:
+        self.arg_parser.add_argument(
+            "--filters",
+            dest="filters",
+            type=str,
+            nargs="*",
+            help="Use these values to filter experiments to be run.",
+        )
+
     def _add_gpus(self) -> None:
         self.arg_parser.add_argument(
             "--gpus", dest="gpus", nargs="*", default=[], help="Available GPUs"
@@ -129,7 +138,7 @@ class OptionParser:
             "-O",
             action="store_true",
             dest="optimize",
-            help="Send -OO to python process."
+            help="Send -OO to python process.",
         )
 
     def _add_overwrite(self) -> None:
@@ -209,7 +218,7 @@ class OptionParser:
             dest="runs",
             required=True,
             type=int,
-            nargs='+',
+            nargs="+",
             help="Runs we refer to here.",
         )
 

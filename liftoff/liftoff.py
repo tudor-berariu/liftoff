@@ -88,7 +88,36 @@ class LiftoffResources:
         return msg
 
 
-def some_run_path(experiment_path):
+def experiment_matches(run_path, filters):
+    """ Here we take the run_path and some filters ans check if the config there matches
+        those filters.
+    """
+    with open(os.path.join(run_path, "cfg.yaml")) as handler:
+        cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+
+    assert isinstance(filters, list)
+    assert all(len(flt.split("=")) == 2 for flt in filters)
+
+    for flt in filters:
+        keys, value = flt.split("=")
+        keys = keys.split(".")
+        crt_cfg = cfg
+        for key in keys[:-1]:
+            if key not in crt_cfg:
+                return False
+            else:
+                assert isinstance(crt_cfg[key], dict)
+                crt_cfg = crt_cfg[key]
+        try:
+            if crt_cfg[keys[-1]] != type(crt_cfg[keys[-1]])(value):
+                return False
+        except Exception as exception:  # pylint: disable=broad-except
+            print(exception)
+            return False
+    return True
+
+
+def some_run_path(experiment_path, filters=None):
     """ So we have that experiment path and we ask for a single subexperiment
         we might run now.
     """
@@ -112,6 +141,9 @@ def some_run_path(experiment_path):
                                     if entry3.name in must_be:
                                         mandatory_files.append(entry3.name)
                             if done_before or set(mandatory_files) != set(must_be):
+                                continue
+                            if filters and not experiment_matches(run_path, filters):
+                                print(f"Skipping {run_path:s} as it was filtered out.")
                                 continue
                             yield run_path
 
@@ -140,6 +172,7 @@ def parse_options() -> Namespace:
             "time_limit",
             "optimize",
             "args",
+            "filters",
         ],
     )
     return opt_parser.parse_args()
@@ -242,6 +275,8 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=F
 
 
 def launch_experiment(opts):
+    """ This is like the most important function in the whole Universe.
+    """
     resources = LiftoffResources(opts)
     active_pids = []
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
@@ -285,7 +320,7 @@ def launch_experiment(opts):
         path_start = perf_counter()
         attempt = 0
         success = False
-        for run_path in some_run_path(opts.experiment_path):
+        for run_path in some_run_path(opts.experiment_path, filters=opts.filters):
             attempt += 1
             lock_path = os.path.join(run_path, ".__lock")
             if lock_file(lock_path, opts.session_id):
