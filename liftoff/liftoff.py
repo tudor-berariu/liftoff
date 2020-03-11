@@ -173,6 +173,7 @@ def parse_options() -> Namespace:
             "optimize",
             "args",
             "filters",
+            "results_path",
         ],
     )
     return opt_parser.parse_args()
@@ -427,7 +428,9 @@ def run_here(opts):
     if opts.copy_to_clipboard:
         prep_args.append("--cc")
     prepare_opts = prepare_parse_options(prep_args)
-    prepare_opts.args = opts.args
+    # prepare_opts.args = opts.args
+    prepare_opts.__dict__.update(vars(opts))
+
     opts.experiment_path = prepare_experiment(prepare_opts)
 
     with os.scandir(opts.experiment_path) as fit:
@@ -462,7 +465,6 @@ def launch() -> None:
     """ Main function.
     """
     opts = parse_options()
-
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
         check_opts_integrity(opts)
