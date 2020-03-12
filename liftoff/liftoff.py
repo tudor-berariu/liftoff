@@ -174,6 +174,7 @@ def parse_options() -> Namespace:
             "args",
             "filters",
             "results_path",
+            "name",
         ],
     )
     return opt_parser.parse_args()
