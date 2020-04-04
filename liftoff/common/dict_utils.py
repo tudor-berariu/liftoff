@@ -40,7 +40,7 @@ def deep_update_dict(dct1, dct2, delete_entries=False):
         if delete_entries and value == "delete" and key in dct1:
             del dct1["key"]
         elif key.startswith("_"):
-            dct1[key] = value
+            dct1[key[1:]] = value
         elif isinstance(value, dict):
             if key in dct1 and isinstance(dct1[key], dict):
                 deep_update_dict(dct1[key], value)
