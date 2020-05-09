@@ -490,6 +490,10 @@ def prepare_experiment(opts):
                 run_cfg["run_id"] = run_id
                 run_cfg["cfg_id"] = crt_cfg_id
                 run_cfg["title"] = title
+                dir_name = os.path.basename(opts.experiment_path.rstrip("/"))
+                run_cfg["full_title"] = f"{dir_name}_{title}" \
+                    if title not in dir_name else dir_name
+
                 if exp_cfg:
                     run_cfg["experiment_arguments"] = exp_cfg
 
