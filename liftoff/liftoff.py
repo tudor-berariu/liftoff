@@ -432,25 +432,42 @@ def run_here(opts):
     # prepare_opts.args = opts.args
     prepare_opts.__dict__.update(vars(opts))
 
-    opts.experiment_path = prepare_experiment(prepare_opts)
+    # Fast_check if cfg file is already prepared
+    with open(opts.config_path) as handler:
+        dummy_config = yaml.load(handler, Loader=yaml.SafeLoader)
+    if "out_dir" in dummy_config and os.path.isdir(dummy_config["out_dir"]):
+        opts.experiment_path = dummy_config["out_dir"]
 
-    with os.scandir(opts.experiment_path) as fit:
-        for entry in fit:
-            if entry.name.startswith(".") or not entry.is_dir():
-                continue
-            with os.scandir(entry.path) as fit2:
-                for entry2 in fit2:
-                    if entry2.name.startswith(".") or not entry2.is_dir():
-                        continue
-                    run_path = entry2.path
-                    leaf_path = os.path.join(run_path, ".__leaf")
-                    cfg_path = os.path.join(run_path, "cfg.yaml")
-                    if os.path.isfile(leaf_path):
-                        with open(cfg_path) as handler:
-                            cfg = yaml.load(handler, Loader=yaml.SafeLoader)
-                        args = dict_to_namespace(cfg)
-                        print(clr("\nStarting\n", attrs=["bold"]))
-                        get_function(opts)(args)
+        run_path = dummy_config["out_dir"]
+        leaf_path = os.path.join(run_path, ".__leaf")
+        cfg_path = os.path.join(run_path, "cfg.yaml")
+        if os.path.isfile(leaf_path):
+            with open(cfg_path) as handler:
+                cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+            args = dict_to_namespace(cfg)
+            print(clr("\nStarting\n", attrs=["bold"]))
+            get_function(opts)(args)
+    else:
+        # Virgin cfg
+        opts.experiment_path = prepare_experiment(prepare_opts)
+
+        with os.scandir(opts.experiment_path) as fit:
+            for entry in fit:
+                if entry.name.startswith(".") or not entry.is_dir():
+                    continue
+                with os.scandir(entry.path) as fit2:
+                    for entry2 in fit2:
+                        if entry2.name.startswith(".") or not entry2.is_dir():
+                            continue
+                        run_path = entry2.path
+                        leaf_path = os.path.join(run_path, ".__leaf")
+                        cfg_path = os.path.join(run_path, "cfg.yaml")
+                        if os.path.isfile(leaf_path):
+                            with open(cfg_path) as handler:
+                                cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+                            args = dict_to_namespace(cfg)
+                            print(clr("\nStarting\n", attrs=["bold"]))
+                            get_function(opts)(args)
 
 
 def check_opts_integrity(opts):
