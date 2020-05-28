@@ -175,6 +175,7 @@ def parse_options() -> Namespace:
             "filters",
             "results_path",
             "name",
+            "max_runs",
         ],
     )
     return opt_parser.parse_args()
@@ -284,6 +285,7 @@ def launch_experiment(opts):
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
 
     start = perf_counter()
+    run_cnt = 0
 
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
@@ -319,6 +321,12 @@ def launch_experiment(opts):
             )
             break
 
+        if opts.max_runs > 0 and opts.max_runs <= run_cnt:
+            print(
+                f"[{time.strftime(time.ctime())}] Max runs exceeded. {opts.max_runs} "
+            )
+            break
+
         path_start = perf_counter()
         attempt = 0
         success = False
@@ -349,6 +357,9 @@ def launch_experiment(opts):
                 "All subexperiments are done / running."
             )
             break
+
+        run_cnt += 1
+
 
     while active_pids:
         still_active_pids = []

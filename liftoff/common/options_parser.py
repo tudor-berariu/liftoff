@@ -275,3 +275,12 @@ class OptionParser:
             default=0,
             help="Stop if this time limit (in miuntes) is exceeded.",
         )
+
+    def _add_max_runs(self) -> None:
+        self.arg_parser.add_argument(
+            "--max-runs",
+            type=int,
+            dest="max_runs",
+            default=0,
+            help="Stop if max runs have been exceeded. (default 0 - run all).",
+        )
