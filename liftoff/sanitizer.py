@@ -6,6 +6,7 @@ from argparse import Namespace
 from datetime import datetime
 from collections import defaultdict
 import os.path
+import shutil
 from termcolor import colored as clr
 from .common.experiment_info import is_experiment
 from .common.options_parser import OptionParser
@@ -44,7 +45,10 @@ def maybe_remove_all(opts, run_path, prefix, info, lines):
     for entry in product_paths:
         info[entry.name] += 1
         if opts.do:
-            os.remove(entry.path)
+            if os.path.isdir(entry.path):
+                shutil.rmtree(entry.path)
+            else:
+                os.remove(entry.path)
             lines.append(f"{prefix:s} Deleted {entry.name}\n")
     return info, lines
 
