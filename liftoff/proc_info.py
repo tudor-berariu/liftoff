@@ -13,8 +13,7 @@ def parse_options() -> Namespace:
     """
 
     opt_parser = OptionParser(
-        "liftoff-status",
-        ["experiment", "all", "timestamp_fmt", "results_path", "do"],
+        "liftoff-status", ["experiment", "all", "timestamp_fmt", "results_path", "do"],
     )
     return opt_parser.parse_args()
 
@@ -29,7 +28,7 @@ def get_running_liftoffs(experiment: str, results_path: str):
         f"--files-with-matches {results_path:s}/*/.__* -e"
     )
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -57,12 +56,13 @@ def get_running_liftoffs(experiment: str, results_path: str):
             f"; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
         )
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
         )
         if result.stderr:
             raise Exception(result.stderr.decode("utf-8"))
 
         pids = []
+        print(result.stdout.decode("utf-8").split("\n"))
         for line1 in result.stdout.decode("utf-8").split("\n"):
             if not line1:
                 continue
@@ -70,18 +70,19 @@ def get_running_liftoffs(experiment: str, results_path: str):
             pid, fake_ppid, *other = line1.split()
             pid, fake_ppid = int(pid), int(fake_ppid)
             if fake_ppid != 1:
-                cfg = ""
+                cfg, good = "", True
                 for part in other:
                     if part.endswith("cfg.yaml"):
                         cfg = (
-                            os.path.basename(
-                                os.path.dirname(os.path.dirname(part))
-                            )
+                            os.path.basename(os.path.dirname(os.path.dirname(part)))
                             + "/"
                             + os.path.basename(os.path.dirname(part))
                         )
+                    elif ".__crash" in part:
+                        good = False
                         break
-                pids.append((pid, cfg))
+                if good:
+                    pids.append((pid, cfg))
 
         proc_group["session"] = session_id
         proc_group["ppid"] = ppid
@@ -98,15 +99,9 @@ def display_procs(running):
     for experiment_name, details in running.items():
         print(clr(experiment_name, attrs=["bold"]))
         for info in details:
-            nrunning = clr(
-                f"{len(info['procs']):d}", color="blue", attrs=["bold"]
-            )
+            nrunning = clr(f"{len(info['procs']):d}", color="blue", attrs=["bold"])
             ppid = clr(f"{info['ppid']:5d}", color="red", attrs=["bold"])
-            print(
-                f"   {ppid:s}"
-                f" :: {info['session']:s}"
-                f" :: {nrunning:s} running"
-            )
+            print(f"   {ppid:s}" f" :: {info['session']:s}" f" :: {nrunning:s} running")
             for pid, name in info["procs"]:
                 print(f"      - {pid:5d} :: {name:s}")
 

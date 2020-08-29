@@ -276,6 +276,24 @@ class OptionParser:
             help="Stop if this time limit (in miuntes) is exceeded.",
         )
 
+    def _add_start_by(self) -> None:
+        self.arg_parser.add_argument(
+            "--start-by",
+            type=int,
+            dest="start_by",
+            default=0,
+            help="Do not launch processes if this time (in seconds) has been exceeded.",
+        )
+
+    def _add_end_by(self) -> None:
+        self.arg_parser.add_argument(
+            "--end-by",
+            type=int,
+            dest="end_by",
+            default=0,
+            help="Pass this to the processes using ENDBY variable.",
+        )
+
     def _add_max_runs(self) -> None:
         self.arg_parser.add_argument(
             "--max-runs",

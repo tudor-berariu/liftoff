@@ -19,11 +19,7 @@ def parse_options() -> Namespace:
 
 
 def ask_user():
-    answer = (
-        str(input("\nAre you sure you want to kill them? (y/n)"))
-        .lower()
-        .strip()
-    )
+    answer = str(input("\nAre you sure you want to kill them? (y/n)")).lower().strip()
 
     if answer and answer[0] == "y":
         return True
@@ -31,18 +27,19 @@ def ask_user():
         return False
     return ask_user()
 
+
 def running_children(session_id):
     """ Gets running processes with a specific session-id.
         TODO: check more details.
     """
-    escaped_sid = session_id.replace("-", "\-")
+    escaped_sid = session_id.replace("-", r"\-")
     cmd = (
         f"for p in "
         f"`pgrep -f '\\-\\-session\\-id {escaped_sid:s}'`"
         f"; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
     )
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -52,11 +49,14 @@ def running_children(session_id):
         if not line1:
             continue
 
-        pid, fake_ppid, *_other = line1.split()
+        pid, fake_ppid, *other = line1.split()
         pid, fake_ppid = int(pid), int(fake_ppid)
         if fake_ppid != 1:
-            pids.append(pid)
+            good = not any(".__crash" in p for p in other)
+            if good:
+                pids.append(pid)
     return pids
+
 
 def abort_experiment(ppid, results_path):
     """ Here we search for running pids.
@@ -64,19 +64,19 @@ def abort_experiment(ppid, results_path):
 
     cmd = f"COLUMNS=0 ps -o cmd= -f {ppid:d}"
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
 
-    lcmd, = result.stdout.decode("utf-8").strip().split("\n")
-    
+    (lcmd,) = result.stdout.decode("utf-8").strip().split("\n")
+
     found = False
     for arg in lcmd.split():
         if is_experiment(arg):
             found = True
             break
-    
+
     if not found:
         print(lcmd)
         return
@@ -105,9 +105,7 @@ def abort_experiment(ppid, results_path):
     if not found:
         print("Couldn't find the process you want to kill.")
         print(
-            "Run",
-            clr("liftoff-procs", attrs=["bold"]),
-            "to see running liftoffs.",
+            "Run", clr("liftoff-procs", attrs=["bold"]), "to see running liftoffs.",
         )
         return
 
@@ -124,11 +122,12 @@ def abort_experiment(ppid, results_path):
 
     cmd = f"kill {ppid:d} " + " ".join([str(p) for p in pids])
 
-    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True, check=True)
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
 
     print("The eagle is down! Mission accomplished.")
+
 
 def abort():
     """ Main function.

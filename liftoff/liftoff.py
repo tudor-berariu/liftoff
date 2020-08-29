@@ -169,7 +169,9 @@ def parse_options() -> Namespace:
             "no_detach",
             "verbose",
             "copy_to_clipboard",
-            "time_limit",
+            "time_limit",  # This should be removed in favour of start_by
+            "start_by",
+            "end_by",
             "optimize",
             "args",
             "filters",
@@ -216,7 +218,9 @@ def lock_file(lock_path: str, session_id: str) -> bool:
     return False
 
 
-def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False):
+def launch_run(  # pylint: disable=bad-continuation
+    run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False, end_by=None
+):
     """ Here we launch a run from an experiment.
         This might be the most important function here.
     """
@@ -236,6 +240,9 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=F
     if gpu is not None:
         env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
 
+    if end_by is not None:
+        env_vars += f" ENDBY={end_by}"
+
     flags = "-u -OO" if optim else "-u"
 
     py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
@@ -243,22 +250,22 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=F
     if do_nohup:
         cmd = (
             f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            + f" nohup sh -c '{env_vars:s} {py_cmd:s}"
-            + f" 2>{err_path:s} 1>{out_path:s}"
-            + f" && date +%s > {end_path:s}"
-            + f" || date +%s > {crash_path:s}'"
-            + f" 1> {wrap_out_path} 2> {wrap_err_path}"
-            + f" & echo $!"
+            f" nohup sh -c '{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s}"
+            f" && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}'"
+            f" 1> {wrap_out_path} 2> {wrap_err_path}"
+            f" & echo $!"
         )
     else:
         cmd = (
             f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            + f" sh -c '{env_vars:s} {py_cmd:s}"
-            + f" 2>{err_path:s} 1>{out_path:s}"
-            + f" && date +%s > {end_path:s}"
-            + f" || date +%s > {crash_path:s}'"
-            + f" 1>{wrap_out_path} 2>{wrap_err_path}"
-            + f" & echo $!"
+            f" sh -c '{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s}"
+            f" && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}'"
+            f" 1>{wrap_out_path} 2>{wrap_err_path}"
+            f" & echo $!"
         )
 
     print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
@@ -277,6 +284,24 @@ def launch_run(run_path, py_script, session_id, gpu=None, do_nohup=True, optim=F
     return pid, gpu, title, py_cmd
 
 
+def refresh_pids(active_pids, resources):
+    """ This function gets the previous list of running processes, the resources, and
+        return the new list of pids. The resources are modified if some processes ended.
+    """
+    still_active_pids = []
+    no_change = True
+    for info in active_pids:
+        pid, gpu, title, cmd, lock_path = info
+        if still_active(pid, cmd):
+            still_active_pids.append(info)
+        else:
+            print(f"[{time.strftime(time.ctime())}] {title} seems to be over.")
+            os.remove(lock_path)
+            resources.free(gpu=gpu)
+            no_change = False
+    return still_active_pids, no_change
+
+
 def launch_experiment(opts):
     """ This is like the most important function in the whole Universe.
     """
@@ -286,38 +311,45 @@ def launch_experiment(opts):
 
     start = perf_counter()
     run_cnt = 0
+    sleep_time = 1
+    launched_something = False
 
     with open(pid_path, "a") as handler:
         handler.write(f"{os.getpid():d}\n")
     while True:
         print(f"[{time.strftime(time.ctime())}] Resources:", resources.state)
+        if not launched_something:
+            active_pids, _ = refresh_pids(active_pids, resources)
+
         available, next_gpu = resources.is_free()
         print(f"[{time.strftime(time.ctime())}] Free??: {available}, {next_gpu}")
         while not available:
-            still_active_pids = []
-            do_sleep = True
-            for info in active_pids:
-                pid, gpu, title, cmd, lock_path = info
-                if still_active(pid, cmd):
-                    still_active_pids.append(info)
-                else:
-                    print(f"[{time.strftime(time.ctime())}] {title} seems to be over.")
-                    os.remove(lock_path)
-                    resources.free(gpu=gpu)
-                    do_sleep = False
-            active_pids = still_active_pids
+            active_pids, do_sleep = refresh_pids(active_pids, resources)
             if do_sleep:
-                time.sleep(1)
+                time.sleep(sleep_time)
             available, next_gpu = resources.is_free()
+
+        # There are several conditions that stop liftoff:
+        # 1. someone created the .STOP file in that experiment
+        # 2. start_by has been exceeded
+        # 3. end_by has been exceeded   (if start_by has not beed provided)
+        # 4. max-runs has been exceeded
 
         if should_stop(opts.experiment_path):
             print(f"[{time.strftime(time.ctime())}] Exit once running procs are over.")
             break
 
-        if opts.time_limit > 0 and (perf_counter() - start) > (opts.time_limit * 60.0):
+        if opts.start_by > 0 and (perf_counter() - start) > opts.start_by:
             print(
-                f"[{time.strftime(time.ctime())}] Time limit exceeded. "
-                "Ending as soon as running procs are over."
+                f"[{time.strftime(time.ctime())}] Cannot launch more processes."
+                " Time limit exceeded."
+            )
+            break
+
+        if opts.end_by > 0 and (perf_counter() - start) > opts.end_by:
+            print(
+                f"[{time.strftime(time.ctime())}] Cannot launch more processes."
+                " Time limit exceeded."
             )
             break
 
@@ -329,7 +361,7 @@ def launch_experiment(opts):
 
         path_start = perf_counter()
         attempt = 0
-        success = False
+        launched_something = False
         for run_path in some_run_path(opts.experiment_path, filters=opts.filters):
             attempt += 1
             lock_path = os.path.join(run_path, ".__lock")
@@ -339,7 +371,11 @@ def launch_experiment(opts):
                     f"[{time.strftime(time.ctime())}] Path search took "
                     f"{path_delta:.3f} s. ({attempt:d} attempts)"
                 )
-                success = True
+                launched_something = True
+                if opts.end_by > 0:
+                    end_by = int(opts.end_by - (perf_counter() - start))
+                else:
+                    end_by = None
                 info = launch_run(
                     run_path,
                     opts.script,
@@ -347,35 +383,29 @@ def launch_experiment(opts):
                     gpu=next_gpu,
                     do_nohup=not opts.no_detach,
                     optim=opts.optimize,
+                    end_by=end_by,
                 )
                 active_pids.append(info + (lock_path,))
                 resources.allocate(gpu=next_gpu)
                 break
-        if not success:
+        if not launched_something:
             print(
                 f"[{time.strftime(time.ctime())}] "
                 "All subexperiments are done / running."
             )
-            break
+            if not active_pids:
+                break
+            sleep_time = min(16, sleep_time * 2)
+            time.sleep(sleep_time)
+        else:
+            sleep_time = 1
 
-        run_cnt += 1
-
+        run_cnt += launched_something
 
     while active_pids:
-        still_active_pids = []
-        do_sleep = True
-        for info in active_pids:
-            pid, gpu, title, cmd, lock_path = info
-            if still_active(pid, cmd):
-                still_active_pids.append(info)
-            else:
-                print(f"[{time.strftime(time.ctime())}] > {title} seems to be over.")
-                os.remove(lock_path)
-                resources.free(gpu=gpu)
-                do_sleep = False
-        active_pids = still_active_pids
+        active_pids, do_sleep = refresh_pids(active_pids, resources)
         if do_sleep:
-            time.sleep(1)
+            time.sleep(2)
 
     duration = perf_counter() - start
     msg = (

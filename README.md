@@ -1,5 +1,16 @@
 # liftoff #
 
+## Release log ##
+
+- August 29, 2020: **liftoff 0.3.2**
+
+  - If all runs are either done or running, it does not exit the main loop anymore. So you can add more variations / runs until the main `liftoff` process ends.
+  - `liftoff-procs` and `liftoff-abort` now uniquely identify the child process and they do not display a single run twice. The problem was that I assumed nohuped processes have PPID=-1, but on some machines this is not true. Should work now, although the solution I used is quite naive.
+  - You can send `--end-by` and `--start-by` to `liftoff` so it won't launch any more experiments after `start_by` seconds passed. It also sets an environment variable `ENDBY` for launched processes to know how much time they have left. This is useful when you have some virtual machines for a fixed amount of time to avoid the program crash with no recent checkpoint.
+
+
+## Obsolete documentation, do not trust what is below ##
+
   - launch local experiments using `liftoff`;
     * launch single runs: `liftoff smart_example.py -c diff`
 	* launch multiple runs of the same configuration `liftoff smart_example.py --runs-no 10 --procs-no 3`
@@ -13,7 +24,7 @@
   - kill running experiments using `liftoff-abort` (no worries, it asks you first)
 
 
-## Quick install
+### Quick install ###
 
 Pip install directly from the master:
 
@@ -22,7 +33,7 @@ pip install git+git://github.com/tudor-berariu/liftoff.git#egg=liftoff --process
 ```
 
 
-## Short tutorial on using `liftoff` ##
+### Short tutorial on using `liftoff` ###
 
 After installing `liftoff` go to `./examples/`.
 
@@ -36,7 +47,7 @@ Remove all previous results:
 rm -r results/*
 ```
 
-### The test script ###
+#### The test script ####
 
 The test script is called `smart_example.py`. It takes three numbers
 and adds them together. The arguments are expected in a `Namespace`
@@ -49,7 +60,7 @@ Namespace(x=2, yz=Namespace(y=3,z=4))
 The script sleeps for some seconds and the prints the sum of those
 numbers.
 
-### Monitoring liftoff processes ###
+#### Monitoring liftoff processes ####
 
 Split your terminal and run:
 
@@ -59,7 +70,7 @@ watch -c -n 1 liftoff-status -a
 
 Observe running liftoff experiments there as we go through this tutorial.
 
-### Run it once ###
+#### Run it once ####
 
 `liftoff` is useful even when you run a single script once. It reads
 the config file for you and then calls the function `run` from that
@@ -79,7 +90,7 @@ liftoff smart_example.py --default-config-file default --config-file default
 
 You should see the experiment listed by `liftoff-status`.
 
-### Run a small variation ###
+#### Run a small variation ####
 
 In `configs/default.yaml` there are several variables
 declared. Imagine you just want to change a few of them from your
@@ -91,7 +102,7 @@ File `config/diff.yaml` sets different values for `x` and `z`. Run
 liftoff smart_example.py -c diff
 ```
 
-### Run the same configuration several times ###
+#### Run the same configuration several times ####
 
 Running:
 
@@ -118,7 +129,7 @@ will allow no more than 2 experiments on each GPU, so even if
 `procs-no` is 20, the maximum number of experiments running in
 parallel will be 8.
 
-### Run batches of experiments ###
+#### Run batches of experiments ####
 
 Sometimes you want to test several combinations of values for multiple
 hyperparameters. `liftoff` does that for you.
@@ -143,7 +154,7 @@ liftoff smart_example.py -e test_experiment --comment "My first experiment"
 ```
 to run all those variations.
 
-### Killing processes ###
+#### Killing processes ####
 
 You can kill the most recent launched liftoff experiment:
 `liftoff-abort`, or the most recent one with a given name
@@ -157,7 +168,7 @@ So, let's see how that works.
   - kill it: `liftoff-abort`
 
 
-## Configuration files ##
+### Configuration files ###
 
 #### Assumptions ####
 
@@ -298,7 +309,7 @@ Also, See [this project](https://github.com/tudor-berariu/lifelong-learning)
 
 
 
-## Some useful commands to use when inspecting results ##
+### Some useful commands to use when inspecting results ###
 
 If you have several runs that ended in error but you suspect that some
 error occurs more than once, you might want to count unique crash
