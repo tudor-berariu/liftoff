@@ -28,7 +28,7 @@ def get_running_liftoffs(experiment: str, results_path: str):
         f"--files-with-matches {results_path:s}/*/.__* -e"
     )
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -56,7 +56,7 @@ def get_running_liftoffs(experiment: str, results_path: str):
             f"; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
         )
         result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
         )
         if result.stderr:
             raise Exception(result.stderr.decode("utf-8"))

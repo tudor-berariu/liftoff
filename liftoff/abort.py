@@ -39,7 +39,7 @@ def running_children(session_id):
         f"; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
     )
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -64,7 +64,7 @@ def abort_experiment(ppid, results_path):
 
     cmd = f"COLUMNS=0 ps -o cmd= -f {ppid:d}"
     result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, check=True
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
@@ -122,7 +122,7 @@ def abort_experiment(ppid, results_path):
 
     cmd = f"kill {ppid:d} " + " ".join([str(p) for p in pids])
 
-    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True, check=True)
+    result = subprocess.run(cmd, stderr=subprocess.PIPE, shell=True)
     if result.stderr:
         raise Exception(result.stderr.decode("utf-8"))
 

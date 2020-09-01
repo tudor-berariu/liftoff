@@ -188,7 +188,7 @@ def get_command_for_pid(pid: int) -> str:
     """
     try:
         result = subprocess.run(
-            f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True, check=True
+            f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
         )
         return result.stdout.decode("utf-8").strip()
     except subprocess.CalledProcessError as _e:
