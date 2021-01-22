@@ -66,7 +66,7 @@ def experiment_status(experiment_path):
                                         end_time = int(end_file.readline().strip())
                                         durations.append(end_time - start_time)
                                     except ValueError as _ex:
-                                        sys.stderr.write(f"Error with {crash_path}.\n")
+                                        sys.stderr.write(f"Error with {end_path}.\n")
                                 nended += 1
                             elif os.path.isfile(crash_path):
                                 with open(crash_path) as end_file:
