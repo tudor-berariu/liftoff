@@ -54,8 +54,13 @@ def experiment_status(experiment_path):
                     if os.path.isfile(start_path):
                         nstarted += 1
                         with open(start_path) as start_file:
-                            start_time = int(start_file.readline().strip())
-                            time0 = min(start_time, time0)
+                            try:
+                                start_time = int(start_file.readline().strip())
+                                time0 = min(start_time, time0)
+                            except ValueError as _ex:
+                                sys.stderr.write(
+                                    f"Can't read timestamp in {start_path}.\n"
+                                )
 
                             end_path = os.path.join(entry2.path, ".__end")
                             crash_path = os.path.join(entry2.path, ".__crash")
@@ -66,7 +71,9 @@ def experiment_status(experiment_path):
                                         end_time = int(end_file.readline().strip())
                                         durations.append(end_time - start_time)
                                     except ValueError as _ex:
-                                        sys.stderr.write(f"Error with {end_path}.\n")
+                                        sys.stderr.write(
+                                            f"Can't read timestamp in {end_path}.\n"
+                                        )
                                 nended += 1
                             elif os.path.isfile(crash_path):
                                 with open(crash_path) as end_file:
@@ -74,7 +81,9 @@ def experiment_status(experiment_path):
                                         end_time = int(end_file.readline().strip())
                                         durations.append(end_time - start_time)
                                     except ValueError as _ex:
-                                        sys.stderr.write(f"Error with {crash_path}.\n")
+                                        sys.stderr.write(
+                                            f"Can't read timestamp in {crash_path}.\n"
+                                        )
                                 ncrashed += 1
                             elif os.path.isfile(lock_path):
                                 nlocked += 1
@@ -142,10 +151,7 @@ def status() -> None:
     """
     opts = parse_options()
     experiment_paths = get_experiment_paths(  # pylint: disable=bad-continuation
-        opts.experiment,
-        opts.results_path,
-        opts.timestamp_fmt,
-        latest=(not opts.all),
+        opts.experiment, opts.results_path, opts.timestamp_fmt, latest=(not opts.all),
     )
     display_experiments(
         sorted(
