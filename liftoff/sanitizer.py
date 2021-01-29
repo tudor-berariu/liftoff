@@ -19,7 +19,15 @@ def parse_options(strict: bool = True) -> Namespace:
 
     opt_parser = OptionParser(
         "liftoff-clean",
-        ["config_path", "do", "clean_all", "verbose", "timestamp_fmt", "crashed_only"],
+        [
+            "config_path",
+            "do",
+            "clean_all",
+            "verbose",
+            "timestamp_fmt",
+            "crashed_only",
+            "safe",
+        ],
     )
 
     return opt_parser.parse_args(strict=strict)
@@ -65,6 +73,9 @@ def clean_run(run_path, info, prefix, opts):
     lines = []
 
     if opts.crashed_only and not os.path.exists(crash_path):
+        return
+
+    if opts.safe and os.path.exists(lock_path):
         return
 
     if os.path.exists(seal_path):

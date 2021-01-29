@@ -109,6 +109,8 @@ def experiment_matches(run_path, filters):
                 assert isinstance(crt_cfg[key], dict)
                 crt_cfg = crt_cfg[key]
         try:
+            if value == "None" and crt_cfg[keys[-1]] is not None:
+                return False
             if crt_cfg[keys[-1]] != type(crt_cfg[keys[-1]])(value):
                 return False
         except Exception as exception:  # pylint: disable=broad-except

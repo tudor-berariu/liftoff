@@ -222,6 +222,14 @@ class OptionParser:
             help="Runs we refer to here.",
         )
 
+    def _add_safe(self) -> None:
+        self.arg_parser.add_argument(
+            "--safe",
+            action="store_true",
+            dest="no_detach",
+            help="Do not clean ended, but locked ones.",
+        )
+
     def _add_script(self) -> None:
         self.arg_parser.add_argument(
             "script", type=str, help="Script to be executed with all those configs."
