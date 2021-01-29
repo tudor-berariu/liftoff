@@ -226,7 +226,7 @@ class OptionParser:
         self.arg_parser.add_argument(
             "--safe",
             action="store_true",
-            dest="no_detach",
+            dest="safe",
             help="Do not clean ended, but locked ones.",
         )
 
