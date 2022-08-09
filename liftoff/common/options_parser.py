@@ -310,3 +310,11 @@ class OptionParser:
             default=0,
             help="Stop if max runs have been exceeded. (default 0 - run all).",
         )
+
+    def _add_shuffle(self) -> None:
+        self.arg_parser.add_argument(
+            "--shuffle",
+            action="store_true",
+            dest="shuffle",
+            help="Makes sure the runs are launched randomly.",
+        )
