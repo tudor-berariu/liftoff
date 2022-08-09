@@ -33,6 +33,13 @@ setup(
     author="Tudor Berariu",
     author_email="tudor.berariu@gmail.com",
     license="MIT",
-    install_requires=["gitpython", "pyyaml", "tabulate", "termcolor", "pyperclip"],
+    install_requires=[
+        "numpy",
+        "gitpython",
+        "pyyaml",
+        "tabulate",
+        "termcolor",
+        "pyperclip",
+    ],
     zip_safe=False,
 )
