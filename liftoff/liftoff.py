@@ -1,19 +1,21 @@
 """ TODO: write doc
 """
 
-from argparse import Namespace
-from functools import partial
-from importlib import import_module
 import os
 import os.path
+import random
 import subprocess
 import sys
 import time
-from time import perf_counter
 import traceback
+from argparse import Namespace
+from functools import partial
+from importlib import import_module
+from time import perf_counter
 from typing import Callable, List
-from termcolor import colored as clr
+
 import yaml
+from termcolor import colored as clr
 
 from .common.dict_utils import dict_to_namespace
 from .common.experiment_info import is_experiment, is_yaml
@@ -23,8 +25,7 @@ from .prepare import prepare_experiment
 
 
 class LiftoffResources:
-    """ Here we have a simple class to handle GPU availability.
-    """
+    """Here we have a simple class to handle GPU availability."""
 
     def __init__(self, opts):
         self.gpus = opts.gpus
@@ -45,20 +46,18 @@ class LiftoffResources:
         self.running_procs = 0
 
     def process_commands(self, commands: List[str]):
-        """ Here we process some commands we got from god knows where that
-            might change the way we want to allocate resources.
+        """Here we process some commands we got from god knows where that
+        might change the way we want to allocate resources.
         """
 
     def free(self, gpu=None):
-        """ Here we inform that some process ended, maybe on a specific gpu.
-        """
+        """Here we inform that some process ended, maybe on a specific gpu."""
         if self.gpus:
             self.gpu_running_procs[gpu] -= 1
         self.running_procs -= 1
 
     def is_free(self) -> tuple:
-        """ Here we ask if there are resources available.
-        """
+        """Here we ask if there are resources available."""
         if self.running_procs >= self.procs_no:
             return (False, None)
         if self.gpus:
@@ -69,8 +68,8 @@ class LiftoffResources:
         return (True, None)
 
     def allocate(self, gpu=None) -> None:
-        """ Here we allocate resources for some process. Be careful, no checks
-            are being performed here. We just increment counters.
+        """Here we allocate resources for some process. Be careful, no checks
+        are being performed here. We just increment counters.
         """
         if self.gpus:
             self.gpu_running_procs[gpu] += 1
@@ -78,8 +77,7 @@ class LiftoffResources:
 
     @property
     def state(self):
-        """ Returns the state of the computing resources.
-        """
+        """Returns the state of the computing resources."""
         msg = f"Procs: {self.running_procs} / {self.procs_no}"
         if self.gpus:
             msg += f" | {len(self.gpus):d} GPUS:"
@@ -89,8 +87,8 @@ class LiftoffResources:
 
 
 def experiment_matches(run_path, filters):
-    """ Here we take the run_path and some filters ans check if the config there matches
-        those filters.
+    """Here we take the run_path and some filters ans check if the config there matches
+    those filters.
     """
     with open(os.path.join(run_path, "cfg.yaml")) as handler:
         cfg = yaml.load(handler, Loader=yaml.SafeLoader)
@@ -120,8 +118,8 @@ def experiment_matches(run_path, filters):
 
 
 def some_run_path(experiment_path, filters=None):
-    """ So we have that experiment path and we ask for a single subexperiment
-        we might run now.
+    """So we have that experiment path and we ask for a single subexperiment
+    we might run now.
     """
     must_be = ["cfg.yaml", ".__leaf"]
     must_not_be = [".__lock", ".__crash", ".__end", ".__start"]
@@ -151,14 +149,12 @@ def some_run_path(experiment_path, filters=None):
 
 
 def should_stop(experiment_path):
-    """ Checks if liftoff should exit no mather how much is left to run.
-    """
+    """Checks if liftoff should exit no mather how much is left to run."""
     return os.path.exists(os.path.join(experiment_path, ".STOP"))
 
 
 def parse_options() -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
         "liftoff",
@@ -180,14 +176,14 @@ def parse_options() -> Namespace:
             "results_path",
             "name",
             "max_runs",
+            "shuffle",
         ],
     )
     return opt_parser.parse_args()
 
 
 def get_command_for_pid(pid: int) -> str:
-    """ Returns the command for a pid if that process exists.
-    """
+    """Returns the command for a pid if that process exists."""
     try:
         result = subprocess.run(
             f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
@@ -198,15 +194,13 @@ def get_command_for_pid(pid: int) -> str:
 
 
 def still_active(pid: int, cmd: str) -> bool:
-    """ Checks if a subprocess is still active.
-    """
+    """Checks if a subprocess is still active."""
     os_cmd = get_command_for_pid(pid)
     return cmd in os_cmd
 
 
 def lock_file(lock_path: str, session_id: str) -> bool:
-    """ Creates a file if it does not exist.
-    """
+    """Creates a file if it does not exist."""
     try:
         lck_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         os.write(lck_fd, session_id.encode())
@@ -223,8 +217,8 @@ def lock_file(lock_path: str, session_id: str) -> bool:
 def launch_run(  # pylint: disable=bad-continuation
     run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False, end_by=None
 ):
-    """ Here we launch a run from an experiment.
-        This might be the most important function here.
+    """Here we launch a run from an experiment.
+    This might be the most important function here.
     """
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
@@ -287,8 +281,8 @@ def launch_run(  # pylint: disable=bad-continuation
 
 
 def refresh_pids(active_pids, resources):
-    """ This function gets the previous list of running processes, the resources, and
-        return the new list of pids. The resources are modified if some processes ended.
+    """This function gets the previous list of running processes, the resources, and
+    return the new list of pids. The resources are modified if some processes ended.
     """
     still_active_pids = []
     no_change = True
@@ -304,9 +298,16 @@ def refresh_pids(active_pids, resources):
     return still_active_pids, no_change
 
 
+def shuffle(some_generator):
+    """Takes a generator and returns a shuffled generator."""
+    seq = list(some_generator)
+    random.shuffle(seq)
+    for x in seq:
+        yield x
+
+
 def launch_experiment(opts):
-    """ This is like the most important function in the whole Universe.
-    """
+    """This is like the most important function in the whole Universe."""
     resources = LiftoffResources(opts)
     active_pids = []
     pid_path = os.path.join(opts.experiment_path, f".__{opts.session_id}")
@@ -361,10 +362,14 @@ def launch_experiment(opts):
             )
             break
 
+        run_paths = some_run_path(opts.experiment_path, filters=opts.filters)
+        if opts.shuffle:
+            run_paths = shuffle(run_paths)
+
         path_start = perf_counter()
         attempt = 0
         launched_something = False
-        for run_path in some_run_path(opts.experiment_path, filters=opts.filters):
+        for run_path in run_paths:
             attempt += 1
             lock_path = os.path.join(run_path, ".__lock")
             if lock_file(lock_path, opts.session_id):
@@ -419,8 +424,7 @@ def launch_experiment(opts):
 
 
 def systime_to(timestamp_file_path: str) -> None:
-    """ Write current system time to a file.
-    """
+    """Write current system time to a file."""
     cmd = f"date +%s 1> {timestamp_file_path:s}"
     proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, shell=True)
     (_, err) = proc.communicate()
@@ -428,8 +432,7 @@ def systime_to(timestamp_file_path: str) -> None:
 
 
 def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
-    """ Wrapper around function to be called that also writes info files.
-    """
+    """Wrapper around function to be called that also writes info files."""
     start_path = os.path.join(args.out_dir, ".__start")
     end_path = os.path.join(args.out_dir, ".__end")
     crash_path = os.path.join(args.out_dir, ".__crash")
@@ -448,8 +451,7 @@ def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
 
 
 def get_function(opts: Namespace) -> Callable[[Namespace], None]:
-    """ Loads the script and calls run(opts)
-    """
+    """Loads the script and calls run(opts)"""
     sys.path.append(os.getcwd())
     module_name = opts.script
     if module_name.endswith(".py"):
@@ -465,8 +467,8 @@ def get_function(opts: Namespace) -> Callable[[Namespace], None]:
 
 
 def run_here(opts):
-    """ If there's a single run in the experiment we run it in this process by
-        calling run in the script.
+    """If there's a single run in the experiment we run it in this process by
+    calling run in the script.
     """
     prep_args = [opts.config_path, "--do"]
     if opts.copy_to_clipboard:
@@ -514,8 +516,7 @@ def run_here(opts):
 
 
 def check_opts_integrity(opts):
-    """ Here we do some checks...
-    """
+    """Here we do some checks..."""
     if opts.args:
         raise ValueError("--args works for single experiment only; see liftoff-prepare")
     if opts.no_detach and opts.procs_no != 1:
@@ -523,8 +524,7 @@ def check_opts_integrity(opts):
 
 
 def launch() -> None:
-    """ Main function.
-    """
+    """Main function."""
     opts = parse_options()
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
