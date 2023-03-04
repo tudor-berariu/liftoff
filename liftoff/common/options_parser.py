@@ -70,7 +70,9 @@ class OptionParser:
             dest="args",
             type=str,
             nargs="*",
-            help="Use these values to overwrite the config file.",
+            help="""List of `key=value` strings that overwrite the config file.\
+                Example: `--args model.name=AlexNet` will overwrite the value\
+                for `model.name` in the config file.""",
         )
 
     def _add_copy_to_clipboard(self) -> None:
@@ -99,7 +101,7 @@ class OptionParser:
             "--crashed-only",
             action="store_true",
             dest="crashed_only",
-            help="Apply the actions only to crashed subexperiments.",
+            help="Apply the actions only to crashed experiment runs.",
         )
 
     def _add_experiment(self) -> None:
@@ -116,12 +118,21 @@ class OptionParser:
             dest="filters",
             type=str,
             nargs="*",
-            help="Use these values to filter experiments to be run.",
+            help="""List of `key=value` strings present in your config files \
+            or results folder that you wish to filter.\
+            Example: `--filters optim.lr=0.001 model.name=AlexNet` will match \
+            experiments containing this configuration. `liftoff ...` will use it to \
+            leave out matched experiments from launching. `liftoff-lock/unlock` will \
+            use it to act on matched experiments accordingly.""",
         )
 
     def _add_gpus(self) -> None:
         self.arg_parser.add_argument(
-            "--gpus", dest="gpus", nargs="*", default=[], help="Available GPUs"
+            "--gpus",
+            dest="gpus",
+            nargs="*",
+            default=[],
+            help="List of available GPUs. Eg.: --gpus 0 1",
         )
 
     def _add_name(self) -> None:
@@ -164,7 +175,7 @@ class OptionParser:
             nargs="*",
             type=int,
             default=[],
-            help="Maximum procs to load on each GPU.",
+            help="Max number of experiment runs to load on each GPU.",
         )
 
     def _add_pid(self) -> None:
@@ -181,7 +192,8 @@ class OptionParser:
             required=False,
             type=int,
             default=default_value,
-            help="Number of runs for each sub-experiment",
+            help="""Total number of experiment runs allowed to run concurrently.\
+            Defaults to 1.""",
         )
 
     def _add_results_path(self) -> None:
@@ -195,7 +207,7 @@ class OptionParser:
             required=False,
             type=str,
             default=default_value,
-            help="Specify the results folder.",
+            help="Root path containing experiments. Defaults to `./results`.",
         )
 
     def _add_runs_no(self) -> None:
