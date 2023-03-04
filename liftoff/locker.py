@@ -7,7 +7,7 @@ from datetime import datetime
 from collections import defaultdict
 import os
 from termcolor import colored as clr
-from .common.experiment_info import is_experiment
+from .common.experiment_info import is_experiment, experiment_matches
 from .common.options_parser import OptionParser
 from .liftoff import lock_file
 
@@ -17,7 +17,8 @@ def parse_options(strict: bool = True) -> Namespace:
     """
 
     opt_parser = OptionParser(
-        "liftoff-lock", ["config_path", "do", "runs", "verbose", "timestamp_fmt"]
+        "liftoff-lock",
+        ["config_path", "runs", "filters", "do", "verbose", "timestamp_fmt"]
     )
 
     return opt_parser.parse_args(strict=strict)
@@ -84,12 +85,15 @@ def lock_run(run_path, info, prefix, opts):
             j_hndlr.writelines(lines)
 
 
-def lock_experiment(opts, unlock=False):
-    """ Clean a specific argument
+def change_experiment_lock_status(opts, unlock=False):
+    """ Lock or Unlock experiments given the RUNS and FILTERS provided in opts.
+        FILTERS allows for selecting experiments based on their configuration.
+        For example experiments containing the configuration `a.b=c` can be targeted.
     """
     info = defaultdict(int)
 
     experiment_path = opts.experiment_path
+    filters = opts.filters
 
     timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
     prefix = f"[{timestamp:s}][{opts.session_id}]"
@@ -102,8 +106,16 @@ def lock_experiment(opts, unlock=False):
                     if entry2.name.startswith(".") or not entry2.is_dir():
                         continue
                     try:
+                        # if `filters` is not provided lock/unlock experiments
+                        # based on the mandatory `runs` argument. Else, check if
+                        # experiment matches any of the filters provided.
+                        target_experiment = True
+                        if filters is not None:
+                            run_path = f"{experiment_path}/{entry.name}/{entry2.name}"
+                            target_experiment = experiment_matches(run_path, filters)
+
                         run_id = int(entry2.name)
-                        if run_id in opts.runs:
+                        if target_experiment and run_id in opts.runs:
                             if unlock:
                                 unlock_run(entry2.path, info, prefix, opts)
                             else:
@@ -134,4 +146,4 @@ def lock(unlock=False):
     if not is_experiment(opts.config_path):
         raise RuntimeError(f"{opts.config_path:s} is not a liftoff experiment")
     opts.experiment_path = opts.config_path
-    lock_experiment(opts, unlock=unlock)
+    change_experiment_lock_status(opts, unlock=unlock)
