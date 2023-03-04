@@ -64,3 +64,37 @@ def get_experiment_paths(  # pylint: disable=bad-continuation
     if latest:
         return [latest_experiment_path]
     return experiment_paths
+
+
+def experiment_matches(run_path, filters):
+    """Here we take the run_path and some filters and check if the config there matches
+    those filters.
+    """
+    with open(os.path.join(run_path, "cfg.yaml")) as handler:
+        cfg = yaml.load(handler, Loader=yaml.SafeLoader)
+
+    assert isinstance(filters, list)
+    assert all(len(flt.split("=")) == 2 for flt in filters)
+
+    # TODO: I think there's a bug in this code, need to check this is the intended
+    # usage. When two filters are provided, eg.: `[a.b=c, x.y=z]`, this function will
+    # return after checking the first filter only.
+    for flt in filters:
+        keys, value = flt.split("=")
+        keys = keys.split(".")
+        crt_cfg = cfg
+        for key in keys[:-1]:
+            if key not in crt_cfg:
+                return False
+            else:
+                assert isinstance(crt_cfg[key], dict)
+                crt_cfg = crt_cfg[key]
+        try:
+            if value == "None":
+                return crt_cfg[keys[-1]] is None
+            if crt_cfg[keys[-1]] != type(crt_cfg[keys[-1]])(value):
+                return False
+        except Exception as exception:  # pylint: disable=broad-except
+            print(exception)
+            return False
+    return True

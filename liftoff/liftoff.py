@@ -18,7 +18,7 @@ import yaml
 from termcolor import colored as clr
 
 from .common.dict_utils import dict_to_namespace
-from .common.experiment_info import is_experiment, is_yaml
+from .common.experiment_info import is_experiment, is_yaml, experiment_matches
 from .common.options_parser import OptionParser
 from .prepare import parse_options as prepare_parse_options
 from .prepare import prepare_experiment
@@ -84,37 +84,6 @@ class LiftoffResources:
             for gpu in self.gpus:
                 msg += f" {gpu}:{self.gpu_running_procs[gpu]}/{self.per_gpu[gpu]};"
         return msg
-
-
-def experiment_matches(run_path, filters):
-    """Here we take the run_path and some filters ans check if the config there matches
-    those filters.
-    """
-    with open(os.path.join(run_path, "cfg.yaml")) as handler:
-        cfg = yaml.load(handler, Loader=yaml.SafeLoader)
-
-    assert isinstance(filters, list)
-    assert all(len(flt.split("=")) == 2 for flt in filters)
-
-    for flt in filters:
-        keys, value = flt.split("=")
-        keys = keys.split(".")
-        crt_cfg = cfg
-        for key in keys[:-1]:
-            if key not in crt_cfg:
-                return False
-            else:
-                assert isinstance(crt_cfg[key], dict)
-                crt_cfg = crt_cfg[key]
-        try:
-            if value == "None":
-                return crt_cfg[keys[-1]] is None
-            if crt_cfg[keys[-1]] != type(crt_cfg[keys[-1]])(value):
-                return False
-        except Exception as exception:  # pylint: disable=broad-except
-            print(exception)
-            return False
-    return True
 
 
 def some_run_path(experiment_path, filters=None):
