@@ -176,9 +176,9 @@ def generate_combinations(cfg, _opts):
             for name, value in node.items():
                 queue.append((value, parent + [name]))
         else:
-
             raise ValueError(
-                f"Encountered {node} in configuration of {''.join(parent)}"
+                f"\n\tEncountered `{node}` in configuration of `{'.'.join(parent)}`." + 
+                "\n\tRemove the field from `config.yaml` or provide a list of values."
             )
 
     all_names, name_to_var = var_names(variables)
