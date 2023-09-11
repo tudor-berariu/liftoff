@@ -8,10 +8,12 @@ from termcolor import colored as clr
 
 
 def version():
-    """ Is there a better way to have some unique source for the version?
-        Should investigate.
+    """Q: Is there a better way to have some unique source for the version?
+    A: Yes.
     """
-    return "0.3.1"
+    from ..version import __version__ as version
+
+    return version
 
 
 def get_branch_commit(path: str):
