@@ -29,7 +29,7 @@
 Pip install directly from the master:
 
 ```sh
-pip install git+git://github.com/tudor-berariu/liftoff.git#egg=liftoff --process-dependency-links
+pip install git+https://github.com/tudor-berariu/liftoff.git#egg=liftoff --upgrade --no-cache-dir --process-dependency-links
 ```
 
 
