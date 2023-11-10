@@ -374,7 +374,7 @@ def prepare_experiment(opts):
             name = opts.name
         while True:
             timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
-            full_name = f"{timestamp:s}_{name:s}/"
+            full_name = f"{timestamp:s}_{name:s}"
             experiment_path = os.path.join(opts.results_path, full_name)
             if not os.path.exists(experiment_path):
                 break
@@ -490,7 +490,7 @@ def prepare_experiment(opts):
                 run_cfg["run_id"] = run_id
                 run_cfg["cfg_id"] = crt_cfg_id
                 run_cfg["title"] = title
-                dir_name = os.path.basename(opts.experiment_path.rstrip("/"))
+                dir_name = os.path.basename(os.path.normpath(opts.experiment_path))
                 run_cfg["full_title"] = f"{dir_name}_{title}" \
                     if title not in dir_name else dir_name
 
