@@ -28,7 +28,7 @@ def method_scoped_directory(request):
 
 class TestPrepareCLI:
 
-    def _check_subdirectory_validity(self, subdir_path):
+    def _check_subdirectory_validity_1(self, subdir_path):
         # Check for the presence of another subfolder and .cfg_hash file
         contents = os.listdir(subdir_path)
         subfolders = [item for item in contents if os.path.isdir(os.path.join(subdir_path, item))]
@@ -91,7 +91,7 @@ class TestPrepareCLI:
 
         for sub_subdir in sub_subdirs:
             sub_subdir_path = os.path.join(subdir_path, sub_subdir)
-            self._check_subdirectory_validity(sub_subdir_path)
+            self._check_subdirectory_validity_1(sub_subdir_path)
 
         
 
