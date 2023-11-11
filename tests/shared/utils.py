@@ -22,3 +22,4 @@ def clean_up_directory(directory_path):
             except Exception as e:
                 print(f'Failed to delete {file_path}. Reason: {e}')
 
+

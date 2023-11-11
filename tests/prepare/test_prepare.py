@@ -65,10 +65,8 @@ class TestPrepareCLI:
             method_scoped_directory,
             "--do",
         ]
-        run_cli_command(
-            command=command,
-            cwd=feature_test_location,
-        )
+
+        run_cli_command(command=command, cwd=feature_test_location)
 
         subdirs = [
             d

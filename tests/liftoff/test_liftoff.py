@@ -111,3 +111,95 @@ class TestLiftoffCLI:
         for sub_subdir in sub_subdirs:
             sub_subdir_path = os.path.join(subdir_path, sub_subdir)
             self._check_subdirectory_validity_1(sub_subdir_path)
+
+    def _check_subdirectory_validity_crash(self, subdir_path):
+        # Check for the presence of another subfolder and .cfg_hash file
+        contents = os.listdir(subdir_path)
+        subfolders = [
+            item for item in contents if os.path.isdir(os.path.join(subdir_path, item))
+        ]
+        cfg_hash_file = ".__cfg_hash"
+
+        assert (
+            len(subfolders) == 1
+        ), f"Expected 1 subfolder in {subdir_path}, found {len(subfolders)}"
+        assert (
+            cfg_hash_file in contents
+        ), f"Missing {cfg_hash_file} file in {subdir_path}"
+
+        # Check the subfolder's contents for cfg.yaml and .leaf file
+        subfolder_path = os.path.join(subdir_path, subfolders[0])
+        subfolder_contents = os.listdir(subfolder_path)
+        expected_files = ["cfg.yaml", ".__leaf", ".__start", ".__crash"]
+
+        for expected_file in expected_files:
+            assert (
+                expected_file in subfolder_contents
+            ), f"Missing {expected_file} in {subfolder_path}"
+
+        unexpected_files = [
+            ".__end"
+        ]
+        for unexpected_file in unexpected_files:
+            assert (
+                unexpected_file not in subfolder_contents
+            ), f"Unexpected {unexpected_file} in {subfolder_path}"
+
+    def test_single_experiment_crash_default_config(self, method_scoped_directory):
+        config_directory = "example_configs_1"
+        config_folder_path = os.path.join(shared_resources_location, config_directory)
+        config_file_path = os.path.join(config_folder_path, "default.yaml")
+
+        script_name = "example_experiment_crash.py"
+
+        command = [
+            "liftoff",
+            script_name,
+            config_file_path,
+            "--results-path",
+            method_scoped_directory,
+        ]
+        run_cli_command(
+            command=command,
+            cwd=feature_test_location,
+        )
+
+        subdirs = [
+            d
+            for d in os.listdir(method_scoped_directory)
+            if os.path.isdir(os.path.join(method_scoped_directory, d))
+        ]
+
+        # Check that there is exactly one subdirectory
+        assert len(subdirs) == 1, "There should be exactly one subdirectory"
+
+        # Define the regex pattern for the folder name
+        date_pattern = re.compile(r"\d{4}[A-Za-z]{3}\d{2}-\d{6}")
+
+        # Check if the subdirectory name matches the date format
+        subdir_name = subdirs[0]
+        assert date_pattern.match(
+            subdir_name
+        ), "Folder name does not match the expected date-time format"
+
+        # Path to the subdirectory
+        subdir_path = os.path.join(method_scoped_directory, subdir_name)
+
+        # List all subdirectories in the found subdirectory
+        sub_subdirs = [
+            d
+            for d in os.listdir(subdir_path)
+            if os.path.isdir(os.path.join(subdir_path, d))
+        ]
+
+        # Check that there are exactly two sub-subdirectories
+        assert (
+            len(sub_subdirs) == 1
+        ), f"Expected 1 subdirectories in {subdir_name}, found {len(sub_subdirs)}"
+
+        assert ".__experiment" in os.listdir(subdir_path)
+
+        for sub_subdir in sub_subdirs:
+            sub_subdir_path = os.path.join(subdir_path, sub_subdir)
+            self._check_subdirectory_validity_crash(sub_subdir_path)
+
