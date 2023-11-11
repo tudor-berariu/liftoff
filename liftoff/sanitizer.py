@@ -144,7 +144,7 @@ def clean_experiment(opts):
 
     if not opts.do:
         print(
-            "\nThis was just a simultation. Rerun with",
+            "\nThis was just a simulation. Rerun with",
             clr("--do", attrs=["bold"]),
             "to clean the experiment for real.",
         )

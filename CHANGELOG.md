@@ -9,15 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Unit test for liftoff-prepare
+- Unit tests for liftoff, liftoff-prepare
 
 ### Changed
 
 - String manipulation for path replaced with os.path.join
+- Some linux terminal specific functions replaced with cross platform python equivalents
 
 ### Fixed
 
 - Some string formatting issues
-- Path building in prepare for cross compatibility with Windows
+- Path building in 'prepare.py' for cross compatibility with Windows
+- Some typos
 
 <!-- ## [0.4.0] - 2023.11.xx -->
