@@ -21,3 +21,4 @@ def clean_up_directory(directory_path):
                     shutil.rmtree(file_path)
             except Exception as e:
                 print(f'Failed to delete {file_path}. Reason: {e}')
+

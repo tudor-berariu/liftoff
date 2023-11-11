@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import traceback
+import psutil
 from argparse import Namespace
 from functools import partial
 from importlib import import_module
@@ -37,7 +38,7 @@ class LiftoffResources:
             elif len(opts.per_gpu) == 1:
                 self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
-                raise ValueError("Strage per_gpu values. {opts.per_gpu}")
+                raise ValueError(f"Strage per_gpu values. {opts.per_gpu}")
         else:
             self.per_gpu = None
 
@@ -154,11 +155,10 @@ def parse_options() -> Namespace:
 def get_command_for_pid(pid: int) -> str:
     """Returns the command for a pid if that process exists."""
     try:
-        result = subprocess.run(
-            f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
-        )
-        return result.stdout.decode("utf-8").strip()
-    except subprocess.CalledProcessError as _e:
+        process = psutil.Process(pid)
+        return ' '.join(process.cmdline())
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        # Process does not exist or access is denied
         return ""
 
 
@@ -191,61 +191,61 @@ def launch_run(  # pylint: disable=bad-continuation
     """
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
-    wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
-    wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
     cfg_path = os.path.join(run_path, "cfg.yaml")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
     crash_path = os.path.join(run_path, ".__crash")
-    env_vars = ""
-
+    
     with open(cfg_path) as handler:
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
+    # Prepare environment variables
+    env_vars = os.environ.copy()
     if gpu is not None:
-        env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
-
+        env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
     if end_by is not None:
-        env_vars += f" ENDBY={end_by}"
+        env_vars["ENDBY"] = end_by
 
     flags = "-u -OO" if optim else "-u"
+    py_cmd = [sys.executable, flags, py_script, cfg_path, "--session-id", session_id]
 
-    py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
+    is_windows = platform.system() == 'Windows'
 
-    if do_nohup:
-        cmd = (
-            f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            f" nohup sh -c '{env_vars:s} {py_cmd:s}"
-            f" 2>{err_path:s} 1>{out_path:s}"
-            f" && date +%s > {end_path:s}"
-            f" || date +%s > {crash_path:s}'"
-            f" 1> {wrap_out_path} 2> {wrap_err_path}"
-            f" & echo $!"
-        )
+    # Write the start time
+    with open(start_path, "w") as f:
+        f.write(str(int(time.time())))
+
+    if is_windows:
+        # Windows-specific command execution
+        with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
+            proc = subprocess.Popen(
+                py_cmd,
+                stdout=out_file,
+                stderr=err_file,
+                env=env_vars
+            )
     else:
-        cmd = (
-            f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            f" sh -c '{env_vars:s} {py_cmd:s}"
-            f" 2>{err_path:s} 1>{out_path:s}"
-            f" && date +%s > {end_path:s}"
-            f" || date +%s > {crash_path:s}'"
-            f" 1>{wrap_out_path} 2>{wrap_err_path}"
-            f" & echo $!"
+        # Unix-like systems: Use shell command for nohup and other features
+        cmd = f"nohup sh -c '{' '.join(py_cmd)} 2>{err_path} 1>{out_path} && echo $! > {start_path} || echo $! > {crash_path}' &"
+        proc = subprocess.Popen(
+            cmd, 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            shell=True, 
+            env=env_vars,
+            start_new_session=do_nohup
         )
 
-    print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
-    sys.stdout.flush()
+    time.sleep(0.1)  # Wait for process to start
 
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
-    (out, err) = proc.communicate()
-    err = err.decode("utf-8").strip()
-    if err:
-        print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
-    pid = int(out.decode("utf-8").strip())
-    print(f"[{time.strftime(time.ctime())}] New PID is {pid:d}.")
-    sys.stdout.flush()
+    if proc.poll() is not None:
+        with open(crash_path, "w") as f:
+            f.write(str(int(time.time())))
+        raise RuntimeError(f"Process {proc.pid} terminated unexpectedly")
+
+    pid = proc.pid
+    print(f"[{time.strftime(time.ctime())}] New PID is {pid}.")
+
     return pid, gpu, title, py_cmd
 
 
@@ -394,10 +394,8 @@ def launch_experiment(opts):
 
 def systime_to(timestamp_file_path: str) -> None:
     """Write current system time to a file."""
-    cmd = f"date +%s 1> {timestamp_file_path:s}"
-    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, shell=True)
-    (_, err) = proc.communicate()
-    return err.decode("utf-8").strip()
+    with open(timestamp_file_path, 'w') as file:
+        file.write(str(int(time.time())))
 
 
 def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:

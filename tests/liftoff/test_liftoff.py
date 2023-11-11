@@ -28,7 +28,7 @@ def method_scoped_directory(request):
         clean_up_directory(specific_test_output_path)
 
 
-class TestPrepareCLI:
+class TestLiftoffCLI:
     def _check_subdirectory_validity_1(self, subdir_path):
         # Check for the presence of another subfolder and .cfg_hash file
         contents = os.listdir(subdir_path)
@@ -47,23 +47,26 @@ class TestPrepareCLI:
         # Check the subfolder's contents for cfg.yaml and .leaf file
         subfolder_path = os.path.join(subdir_path, subfolders[0])
         subfolder_contents = os.listdir(subfolder_path)
-        expected_files = ["cfg.yaml", ".__leaf"]
+        expected_files = ["cfg.yaml", ".__leaf", ".__start", ".__end"]
 
         for expected_file in expected_files:
             assert (
                 expected_file in subfolder_contents
             ), f"Missing {expected_file} in {subfolder_path}"
 
-    def test_prepare_gridsearch_config(self, method_scoped_directory):
+    def test_single_experiment_default_config(self, method_scoped_directory):
         config_directory = "example_configs_1"
         config_folder_path = os.path.join(shared_resources_location, config_directory)
+        config_file_path = os.path.join(config_folder_path, "default.yaml")
+
+        script_name = "example_experiment.py"
 
         command = [
-            "liftoff-prepare",
-            config_folder_path,
+            "liftoff",
+            script_name,
+            config_file_path,
             "--results-path",
             method_scoped_directory,
-            "--do",
         ]
         run_cli_command(
             command=command,
@@ -100,8 +103,8 @@ class TestPrepareCLI:
 
         # Check that there are exactly two sub-subdirectories
         assert (
-            len(sub_subdirs) == 4
-        ), f"Expected 4 subdirectories in {subdir_name}, found {len(sub_subdirs)}"
+            len(sub_subdirs) == 1
+        ), f"Expected 1 subdirectories in {subdir_name}, found {len(sub_subdirs)}"
 
         assert ".__experiment" in os.listdir(subdir_path)
 
