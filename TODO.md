@@ -20,6 +20,6 @@
 
 0. verificăm să meargă `liftoff script.py ./configs/test--dev.yaml` DONE
 1. confirmăm că `liftoff-prepare` produce structura de directoare dorită DONE
-2. confirmăm că `liftoff-status` funcționează (afișează corect tabelul ăla)
+2. confirmăm că `liftoff-status` funcționează (afișează corect tabelul ăla) DONE
 3. testăm că lansarea de procese funcționează, adică `liftoff script.py ./results/un_experiment_generat_de_liftoff-prepare/` ...
 4. verificăm restul lucrurilor mai puțin esențiale, precum liftoff-procs și liftoff-abort.

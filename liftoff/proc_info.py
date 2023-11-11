@@ -4,98 +4,70 @@
 from argparse import Namespace
 import os.path
 import subprocess
+import psutil
 from termcolor import colored as clr
 from .common.options_parser import OptionParser
 
 
 def parse_options() -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
-        "liftoff-status", ["experiment", "all", "timestamp_fmt", "results_path", "do"],
+        "liftoff-status",
+        ["experiment", "all", "timestamp_fmt", "results_path", "do"],
     )
     return opt_parser.parse_args()
 
 
 def get_running_liftoffs(experiment: str, results_path: str):
-    """ Get the running liftoff processes.
-    """
-
-    cmd = (
-        "COLUMNS=0 pgrep liftoff"
-        " | xargs -r -n 1 grep "
-        f"--files-with-matches {results_path:s}/*/.__* -e"
-    )
-    result = subprocess.run(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
-    if result.stderr:
-        raise Exception(result.stderr.decode("utf-8"))
-
+    """Get the running liftoff processes."""
     running = {}
 
-    for session_path in result.stdout.decode("utf-8").split("\n"):
-        if not session_path:
+    for proc in psutil.process_iter(["pid", "ppid", "cmdline"]):
+        try:
+            cmdline = proc.cmdline()
+            # Check if 'liftoff' is part of the command line
+            if any("liftoff" in cmd_part for cmd_part in cmdline):
+                session_id = extract_session_id(cmdline)
+                experiment_full_name = extract_experiment_name(cmdline, results_path)
+
+                # Check if the process matches the experiment criteria
+                if experiment is not None and experiment not in experiment_full_name:
+                    continue
+
+                proc_info = {
+                    "session": session_id,
+                    "ppid": proc.ppid(),
+                    "procs": [(proc.pid, experiment_full_name)],
+                }
+
+                running.setdefault(experiment_full_name, []).append(proc_info)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
-        with open(session_path) as hndlr:
-            ppid = int(hndlr.readline().strip())
-
-        experiment_full_name = os.path.basename(os.path.dirname(session_path))
-
-        if experiment is not None and experiment not in experiment_full_name:
-            continue
-
-        proc_group = dict({})
-        session_id = os.path.basename(session_path)[3:]
-
-        escaped_sid = session_id.replace("-", r"\-")
-        cmd = (
-            f"for p in "
-            f"`pgrep -f '\\-\\-session\\-id {escaped_sid:s}'`"
-            f"; do COLUMNS=0 ps -p $p -o pid,ppid,cmd h; done"
-        )
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-        )
-        if result.stderr:
-            raise Exception(result.stderr.decode("utf-8"))
-
-        pids = []
-        print(result.stdout.decode("utf-8").split("\n"))
-        for line1 in result.stdout.decode("utf-8").split("\n"):
-            if not line1:
-                continue
-
-            pid, fake_ppid, *other = line1.split()
-            pid, fake_ppid = int(pid), int(fake_ppid)
-            if fake_ppid != 1:
-                cfg, good = "", True
-                for part in other:
-                    if part.endswith("cfg.yaml"):
-                        cfg = (
-                            os.path.basename(os.path.dirname(os.path.dirname(part)))
-                            + "/"
-                            + os.path.basename(os.path.dirname(part))
-                        )
-                    elif ".__crash" in part:
-                        good = False
-                        break
-                if good:
-                    pids.append((pid, cfg))
-
-        proc_group["session"] = session_id
-        proc_group["ppid"] = ppid
-        proc_group["procs"] = pids
-
-        running.setdefault(experiment_full_name, []).append(proc_group)
 
     return running
 
 
+def extract_session_id(cmdline):
+    """Extract session ID from the command line arguments."""
+    for part in cmdline:
+        if part.startswith("--session-id"):
+            return part.split("=")[1]
+    return None
+
+
+def extract_experiment_name(cmdline, results_path):
+    """Extract experiment name from the command line arguments."""
+    for part in cmdline:
+        if results_path in part:
+            path_parts = part.split("/")
+            # Assuming the experiment name is the directory right after results_path
+            return path_parts[path_parts.index(results_path) + 1]
+    return None
+
+
 def display_procs(running):
-    """ Display the running liftoff processes.
-    """
+    """Display the running liftoff processes."""
     for experiment_name, details in running.items():
         print(clr(experiment_name, attrs=["bold"]))
         for info in details:
@@ -107,8 +79,7 @@ def display_procs(running):
 
 
 def procs() -> None:
-    """ Entry point for liftoff-procs.
-    """
+    """Entry point for liftoff-procs."""
 
     opts = parse_options()
     display_procs(get_running_liftoffs(opts.experiment, opts.results_path))
