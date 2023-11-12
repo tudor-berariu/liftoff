@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Code for WIndows compatibility in liftoff: launch_run
 - Unit tests for liftoff, liftoff-prepare, liftoff-status
 
 ### Changed
