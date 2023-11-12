@@ -1,0 +1,1 @@
+Resources shared between the tests of the functional tests.

@@ -43,6 +43,8 @@ def run(opts: Namespace) -> None:
     result = (opts.a + opts.b) * opts.c
 
     logger.info(f"Result is {result}")
+    
+    return True
 
 
 def main():

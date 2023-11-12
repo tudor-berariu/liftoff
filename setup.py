@@ -40,6 +40,7 @@ setup(
         "tabulate",
         "termcolor",
         "pyperclip",
+        "psutil",
     ],
     zip_safe=False,
 )

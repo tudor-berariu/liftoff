@@ -9,6 +9,7 @@ import sys
 import time
 import traceback
 import psutil
+import platform
 from argparse import Namespace
 from functools import partial
 from importlib import import_module
@@ -162,8 +163,11 @@ def get_command_for_pid(pid: int) -> str:
         return ""
 
 
-def still_active(pid: int, cmd: str) -> bool:
+def still_active(pid: int, cmd) -> bool:
     """Checks if a subprocess is still active."""
+    if isinstance(cmd, list):
+        cmd = ' '.join(cmd)  # Convert list to string
+
     os_cmd = get_command_for_pid(pid)
     return cmd in os_cmd
 
@@ -189,34 +193,74 @@ def launch_run(  # pylint: disable=bad-continuation
     """Here we launch a run from an experiment.
     This might be the most important function here.
     """
+    # Common path setup
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
     cfg_path = os.path.join(run_path, "cfg.yaml")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
     crash_path = os.path.join(run_path, ".__crash")
-    
+
     with open(cfg_path) as handler:
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
-    # Prepare environment variables
-    env_vars = os.environ.copy()
-    if gpu is not None:
-        env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
-    if end_by is not None:
-        env_vars["ENDBY"] = end_by
-
-    flags = "-u -OO" if optim else "-u"
-    py_cmd = [sys.executable, flags, py_script, cfg_path, "--session-id", session_id]
-
+    # Determine the platform
     is_windows = platform.system() == 'Windows'
 
-    # Write the start time
-    with open(start_path, "w") as f:
-        f.write(str(int(time.time())))
+    # Unix-specific command setup
+    if not is_windows:
+        wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
+        wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
+        env_vars = ""
 
-    if is_windows:
-        # Windows-specific command execution
+        if gpu is not None:
+            env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
+        if end_by is not None:
+            env_vars += f" ENDBY={end_by}"
+        flags = "-u -OO" if optim else "-u"
+
+        py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
+        cmd = (
+            f" date +%s 1> {start_path:s} 2>/dev/null &&"
+            f" nohup sh -c '{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s}"
+            f" && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}'"
+            f" 1> {wrap_out_path} 2> {wrap_err_path}"
+            f" & echo $!"
+        ) if do_nohup else (
+            f" date +%s 1> {start_path:s} 2>/dev/null &&"
+            f" sh -c '{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s}"
+            f" && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}'"
+            f" 1>{wrap_out_path} 2>{wrap_err_path}"
+            f" & echo $!"
+        )
+
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        )
+        (out, err) = proc.communicate()
+        if err:
+            print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
+        pid = int(out.decode("utf-8").strip())
+
+    # Windows-specific command setup
+    else:
+        env_vars = os.environ.copy()
+        if gpu is not None:
+            env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
+        if end_by is not None:
+            env_vars["ENDBY"] = str(end_by)
+        flags = "-u -OO" if optim else "-u"
+        py_cmd = [sys.executable, flags] + py_script.split() + [cfg_path, "--session-id", session_id]
+
+        # Write the start time
+        with open(start_path, "w") as f:
+            f.write(str(int(time.time())))
+
+        # Windows command execution
         with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
             proc = subprocess.Popen(
                 py_cmd,
@@ -224,28 +268,23 @@ def launch_run(  # pylint: disable=bad-continuation
                 stderr=err_file,
                 env=env_vars
             )
-    else:
-        # Unix-like systems: Use shell command for nohup and other features
-        cmd = f"nohup sh -c '{' '.join(py_cmd)} 2>{err_path} 1>{out_path} && echo $! > {start_path} || echo $! > {crash_path}' &"
-        proc = subprocess.Popen(
-            cmd, 
-            stdout=subprocess.PIPE, 
-            stderr=subprocess.PIPE, 
-            shell=True, 
-            env=env_vars,
-            start_new_session=do_nohup
-        )
+            pid = proc.pid
 
-    time.sleep(0.1)  # Wait for process to start
+        # Wait for process to complete
+        proc.wait()
 
-    if proc.poll() is not None:
-        with open(crash_path, "w") as f:
+        # Check if the process terminated unexpectedly
+        if proc.returncode != 0:
+            with open(crash_path, "w") as f:
+                f.write(str(int(time.time())))
+            raise RuntimeError(f"Process {pid} terminated unexpectedly with return code {proc.returncode}")
+
+        # Write to the end file if the process completes successfully
+        with open(end_path, "w") as f:
             f.write(str(int(time.time())))
-        raise RuntimeError(f"Process {proc.pid} terminated unexpectedly")
 
-    pid = proc.pid
     print(f"[{time.strftime(time.ctime())}] New PID is {pid}.")
-
+    sys.stdout.flush()
     return pid, gpu, title, py_cmd
 
 
