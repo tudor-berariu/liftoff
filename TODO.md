@@ -23,3 +23,7 @@
 2. confirmăm că `liftoff-status` funcționează (afișează corect tabelul ăla) DONE
 3. testăm că lansarea de procese funcționează, adică `liftoff script.py ./results/ un_experiment_generat_de_liftoff-prepare/` ... DONE
 4. verificăm restul lucrurilor mai puțin esențiale, precum liftoff-procs și liftoff-abort.
+
+procs doc when doing -h is bugged? It appears like it's the doc for status
+
+what is that session id, how to find it?

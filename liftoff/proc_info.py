@@ -2,8 +2,7 @@
 """
 
 from argparse import Namespace
-import os.path
-import subprocess
+import os
 import psutil
 from termcolor import colored as clr
 from .common.options_parser import OptionParser
@@ -28,11 +27,18 @@ def get_running_liftoffs(experiment: str, results_path: str):
             cmdline = proc.cmdline()
             # Check if 'liftoff' is part of the command line
             if any("liftoff" in cmd_part for cmd_part in cmdline):
+                
+                print("TODO:")
+                print("PRINTING LINE")
+                print(cmdline)
+                
                 session_id = extract_session_id(cmdline)
                 experiment_full_name = extract_experiment_name(cmdline, results_path)
 
                 # Check if the process matches the experiment criteria
-                if experiment is not None and experiment not in experiment_full_name:
+                if (experiment is not None 
+                    and experiment_full_name is not None 
+                    and experiment not in experiment_full_name):
                     continue
 
                 proc_info = {
@@ -60,9 +66,11 @@ def extract_experiment_name(cmdline, results_path):
     """Extract experiment name from the command line arguments."""
     for part in cmdline:
         if results_path in part:
-            path_parts = part.split("/")
+            # Split the path into parts
+            path_parts = part.split(os.path.sep)
             # Assuming the experiment name is the directory right after results_path
-            return path_parts[path_parts.index(results_path) + 1]
+            if results_path in path_parts:
+                return path_parts[path_parts.index(results_path) + 1]
     return None
 
 
@@ -72,10 +80,17 @@ def display_procs(running):
         print(clr(experiment_name, attrs=["bold"]))
         for info in details:
             nrunning = clr(f"{len(info['procs']):d}", color="blue", attrs=["bold"])
-            ppid = clr(f"{info['ppid']:5d}", color="red", attrs=["bold"])
-            print(f"   {ppid:s}" f" :: {info['session']:s}" f" :: {nrunning:s} running")
+            
+            # Handling potential None values for ppid and session
+            ppid_str = f"{info['ppid']:5d}" if info['ppid'] is not None else "N/A"
+            session_str = info['session'] if info['session'] is not None else "N/A"
+
+            ppid_formatted = clr(ppid_str, color="red", attrs=["bold"])
+            print(f"   {ppid_formatted} :: {session_str} :: {nrunning} running")
+            
             for pid, name in info["procs"]:
-                print(f"      - {pid:5d} :: {name:s}")
+                # Assuming pid and name are always valid
+                print(f"      - {pid:5d} :: {name}")
 
 
 def procs() -> None:
