@@ -10,6 +10,7 @@ import time
 import traceback
 import psutil
 import platform
+import threading
 from argparse import Namespace
 from functools import partial
 from importlib import import_module
@@ -32,6 +33,10 @@ class LiftoffResources:
     def __init__(self, opts):
         self.gpus = opts.gpus
         self.procs_no = opts.procs_no
+        
+        # Used in windows implementation
+        self.pid_dict = {}
+        self.pid_events = {}
 
         if self.gpus:
             if len(opts.gpus) == len(opts.per_gpu):
@@ -39,7 +44,7 @@ class LiftoffResources:
             elif len(opts.per_gpu) == 1:
                 self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
-                raise ValueError(f"Strage per_gpu values. {opts.per_gpu}")
+                raise ValueError(f"Strange per_gpu values. {opts.per_gpu}")
         else:
             self.per_gpu = None
 
@@ -186,9 +191,8 @@ def lock_file(lock_path: str, session_id: str) -> bool:
 
     return False
 
-
 def launch_run(  # pylint: disable=bad-continuation
-    run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False, end_by=None
+    run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False, end_by=None, resources=None
 ):
     """Here we launch a run from an experiment.
     This might be the most important function here.
@@ -205,10 +209,62 @@ def launch_run(  # pylint: disable=bad-continuation
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
     # Determine the platform
-    is_windows = platform.system() == 'Windows'
+    platform_is_windows = platform.system() == 'Windows'
 
     # Unix-specific command setup
-    if not is_windows:
+    if platform_is_windows:
+        
+        env_vars = os.environ.copy()
+        if gpu is not None:
+            env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
+        if end_by is not None:
+            env_vars["ENDBY"] = str(end_by)
+        flags = "-u -OO" if optim else "-u"
+        py_cmd = [sys.executable, flags] + py_script.split() + [cfg_path, "--session-id", session_id]
+
+        # Write the start time
+        with open(start_path, "w") as f:
+            f.write(str(int(time.time())))
+
+        experiment_id = f"({title}):({int(time.time())})"
+        resources.pid_events[experiment_id] = threading.Event()
+        
+        # Function to execute the subprocess
+        def run_experiment(exp_id):
+            with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
+                proc = subprocess.Popen(
+                    py_cmd,
+                    stdout=out_file,
+                    stderr=err_file,
+                    env=env_vars
+                )
+
+                # Store the PID and signal main branch can continue
+                resources.pid_dict[exp_id] = proc.pid
+                resources.pid_events[exp_id].set()
+
+                # Wait for the process to complete
+                proc.wait()
+
+                # Check if the process terminated unexpectedly
+                if proc.returncode != 0:
+                    with open(crash_path, "w") as f:
+                        f.write(str(int(time.time())))
+                    print(f"Process {proc.pid} terminated unexpectedly with return code {proc.returncode}")
+                else:
+                    # Write to the end file if the process completes successfully
+                    with open(end_path, "w") as f:
+                        f.write(str(int(time.time())))
+
+        # Launch the subprocess in a separate thread
+        experiment_thread = threading.Thread(target=run_experiment, args=(experiment_id,))
+        experiment_thread.start()
+
+        # Wait for the PID to be available and store it
+        resources.pid_events[experiment_id].wait()
+        pid = resources.pid_dict[experiment_id]
+
+    else:
         wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
         wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
         env_vars = ""
@@ -245,43 +301,7 @@ def launch_run(  # pylint: disable=bad-continuation
         if err:
             print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
         pid = int(out.decode("utf-8").strip())
-
-    # Windows-specific command setup
-    else:
-        env_vars = os.environ.copy()
-        if gpu is not None:
-            env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
-        if end_by is not None:
-            env_vars["ENDBY"] = str(end_by)
-        flags = "-u -OO" if optim else "-u"
-        py_cmd = [sys.executable, flags] + py_script.split() + [cfg_path, "--session-id", session_id]
-
-        # Write the start time
-        with open(start_path, "w") as f:
-            f.write(str(int(time.time())))
-
-        # Windows command execution
-        with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
-            proc = subprocess.Popen(
-                py_cmd,
-                stdout=out_file,
-                stderr=err_file,
-                env=env_vars
-            )
-            pid = proc.pid
-
-        # Wait for process to complete
-        proc.wait()
-
-        # Check if the process terminated unexpectedly
-        if proc.returncode != 0:
-            with open(crash_path, "w") as f:
-                f.write(str(int(time.time())))
-            raise RuntimeError(f"Process {pid} terminated unexpectedly with return code {proc.returncode}")
-
-        # Write to the end file if the process completes successfully
-        with open(end_path, "w") as f:
-            f.write(str(int(time.time())))
+        
 
     print(f"[{time.strftime(time.ctime())}] New PID is {pid}.")
     sys.stdout.flush()
@@ -399,6 +419,7 @@ def launch_experiment(opts):
                     do_nohup=not opts.no_detach,
                     optim=opts.optimize,
                     end_by=end_by,
+                    resources=resources,
                 )
                 active_pids.append(info + (lock_path,))
                 resources.allocate(gpu=next_gpu)
@@ -532,6 +553,10 @@ def check_opts_integrity(opts):
 def launch() -> None:
     """Main function."""
     opts = parse_options()
+  
+    if (not os.path.isdir(opts.config_path)) and (not os.path.isfile(opts.config_path)):
+        raise FileNotFoundError(f"Cannot find path: {opts.config_path}")
+    
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
         check_opts_integrity(opts)

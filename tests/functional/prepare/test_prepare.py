@@ -1,13 +1,13 @@
 import pytest
 import os
 import re
-from ..shared.utils import run_cli_command, clean_up_directory
+from ..shared_test_resources.utils import run_cli_command, clean_up_directory
 
 CLEANUP_TESTS_OUTPUTS = False
 
 feature_test_location = os.path.dirname(os.path.realpath(__file__))
 shared_resources_location = os.path.join(
-    os.path.dirname(feature_test_location), "shared"
+    os.path.dirname(feature_test_location), "shared_test_resources"
 )
 test_temp_output_path = os.path.join(feature_test_location, "tmp")
 
