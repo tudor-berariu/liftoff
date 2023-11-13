@@ -4,7 +4,7 @@
     TODO: change to class methods to common methods if there is no need to call
         those functions outside an instance of OptionParser.
 """
-
+import os
 from argparse import ArgumentParser, Namespace
 from typing import List
 import uuid
@@ -199,7 +199,7 @@ class OptionParser:
     def _add_results_path(self) -> None:
         default_value = self.liftoff_config.get("results_path")
         if default_value is None:
-            default_value = "./results"
+            default_value = os.path.join(".", "results")
         default_value = str(default_value)
         self.arg_parser.add_argument(
             "--results-path",
