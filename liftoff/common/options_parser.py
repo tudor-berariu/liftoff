@@ -22,8 +22,9 @@ class OptionParser:
         self.arg_parser = ArgumentParser(name)
         self.arguments = [str(arg) for arg in arguments]
 
-        for arg in self.arguments:
-            getattr(self, f"_add_{arg:s}")()
+        if self.arguments:
+            for arg in self.arguments:
+                getattr(self, f"_add_{arg:s}")()
 
     def parse_args(self, args: List[str] = None, strict: bool = True) -> Namespace:
         """ Parses command-line arguments and completes options with values

@@ -15,7 +15,7 @@ def run(opts: Namespace) -> None:
         opts.full_title, log_file=os.path.join(opts.out_dir, "experiment_log.log")
     )
 
-    time.sleep(100)
+    time.sleep(5)
     result = (opts.a + opts.b) * opts.c
 
     logger.info(f"Result is {result}")

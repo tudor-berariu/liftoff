@@ -1,5 +1,6 @@
 import os
 import subprocess
+import threading
 import shutil
 
 from typing import List
@@ -42,6 +43,17 @@ def run_cli_command(command: List[str], cwd: str) -> subprocess.CompletedProcess
     return subprocess.run(
         command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
+    
+def run_cli_command_non_blocking(command: List[str], cwd: str):
+    """Run the CLI command in a non-blocking manner and return the thread."""
+    def target():
+        subprocess.run(
+            command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        )
+
+    thread = threading.Thread(target=target)
+    thread.start()
+    return thread
 
 def clean_up_directory(directory_path):
     if os.path.exists(directory_path):

@@ -4,19 +4,12 @@
 """
 
 from setuptools import setup, find_packages
-import re
-import os
 
-def read_version():
-    with open(os.path.join(".", "liftoff", "version.py"), "r") as f:
-        return re.search(r"^__version__\s*=\s*['\"]([^'\"]*)['\"]", f.read(), re.MULTILINE).group(1)
-print(read_version())
 
 VERSION = "0.3.3"  # single source of truth
 print("-- Installing liftoff " + VERSION)
 with open("./liftoff/version.py", "w") as f:
     f.write("__version__ = '{}'\n".format(VERSION))
-
 
 setup(
     name="liftoff",
