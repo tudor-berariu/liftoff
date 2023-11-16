@@ -35,6 +35,10 @@ def method_scoped_directory(request):
 
 class TestProcsCLI:
     def test_multiple_experiments_procs(self, method_scoped_directory):
+        """WARNING: this can detect other liftoff processes, make sure to run
+        each test independently.
+        """
+        
         ### Run liftoff-prepare command
         config_directory = "example_configs_1"
         config_folder_path = os.path.join(shared_resources_location, config_directory)
@@ -129,7 +133,9 @@ class TestProcsCLI:
             elapsed_seconds += poll_interval_seconds
 
         if liftoff_thread.is_alive():
-            raise TimeoutError("Liftoff command did not finish within the expected time.")
+            raise TimeoutError(
+                "Liftoff command did not finish within the expected time."
+            )
         else:
             command = ["liftoff-procs"]
             completed_process = run_cli_command(

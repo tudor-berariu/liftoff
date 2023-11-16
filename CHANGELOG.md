@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Code for WIndows compatibility in liftoff: launch_run
 - Unit tests for liftoff, liftoff-prepare, liftoff-status, liftoff-procs, liftoff-abort
+- New parameter CLI flag --skip-confirmation for abort
 
 ### Changed
 

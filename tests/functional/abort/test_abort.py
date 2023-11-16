@@ -1,7 +1,13 @@
 import pytest
 import os
 import re
-from ..shared_test_resources.utils import run_cli_command, clean_up_directory
+import time
+import psutil
+from ..shared_test_resources.utils import (
+    run_cli_command,
+    clean_up_directory,
+    run_cli_command_non_blocking,
+)
 
 CLEANUP_TESTS_OUTPUTS = False
 
@@ -29,10 +35,7 @@ def method_scoped_directory(request):
 
 
 class TestAbortCLI:
-    
-            
     def test_multiple_experiments_abort(self, method_scoped_directory):
-
         ### Run liftoff-prepare command
         config_directory = "example_configs_1"
         config_folder_path = os.path.join(shared_resources_location, config_directory)
@@ -45,7 +48,7 @@ class TestAbortCLI:
             "--do",
         ]
         run_cli_command(command=command, cwd=feature_test_location)
-        
+
         subdirs = [
             d
             for d in os.listdir(method_scoped_directory)
@@ -55,26 +58,84 @@ class TestAbortCLI:
         assert len(subdirs) == 1, "There should be exactly one subdirectory"
 
         # ### Now actually run the liftoff command
-        
-        # script_name = "example_experiment.py"
-        # exp_path = os.path.join(method_scoped_directory, subdirs[0])
-        
-        # command = [
-        #     "liftoff",
-        #     script_name,
-        #     exp_path,
-        #     "--procs-no",
-        #     "4",
-        # ]
-        # run_cli_command(
-        #     command=command,
-        #     cwd=feature_test_location,
-        # )
-        
-        ### Run command to kill a process
-        
-        ### Check that now that process is no longer running
-        
-        
-            
-    
+
+        script_name = "example_experiment.py"
+        exp_path = os.path.join(method_scoped_directory, subdirs[0])
+
+        command = [
+            "liftoff",
+            script_name,
+            exp_path,
+            "--procs-no",
+            "4",
+        ]
+        liftoff_thread = run_cli_command_non_blocking(
+            command=command,
+            cwd=feature_test_location,
+        )
+
+        time.sleep(2)  # A bit of delay to let the processes start
+
+        ## Check that there are 4 processes running, and they are shown
+        command = ["liftoff-procs"]
+        completed_process = run_cli_command(
+            command=command,
+            cwd=feature_test_location,
+        )
+
+        assert (
+            completed_process.returncode == 0
+        ), "Liftoff command did not execute successfully"
+
+        # Decode the standard output to a string for regex matching
+        output = completed_process.stdout.decode()
+
+        no_processes_msg = "No running liftoff processes"
+        if no_processes_msg in output:
+            raise AssertionError("There does not seem to be any process running.")
+
+        # Extract the parent process ID
+        parent_pid_pattern = r"\n +(\d+) :: "
+        parent_pid_match = re.search(parent_pid_pattern, output)
+        assert parent_pid_match, "Parent process ID not found in the output"
+        parent_pid = int(parent_pid_match.group(1))
+
+        # Abort the parent process ID
+        abort_command = [
+            "liftoff-abort",
+            str(parent_pid),
+            "--results-path",
+            method_scoped_directory,
+            "--skip-confirmation",
+        ]
+        abort_process = run_cli_command(
+            command=abort_command,
+            cwd=feature_test_location,
+        )
+
+        # assert (
+        #     abort_process.returncode == 0
+        # ), "Abort command did not execute successfully"
+
+        abort_stdout = abort_process.stdout.decode()
+        success_message = "The eagle is down! Mission accomplished."
+        assert (
+            success_message in abort_stdout
+        ), "Abort command did not print the expected success message, got:\n" + abort_stdout
+
+        # Check that the parent process is no longer running
+        try:
+            psutil.Process(parent_pid)
+            raise AssertionError("Parent process is still running after abort")
+        except psutil.NoSuchProcess:
+            pass  # Process is not running, which is expected
+
+        # Check that liftoff-procs returns 'No running liftoff processes'
+        completed_process = run_cli_command(
+            command=["liftoff-procs"],
+            cwd=feature_test_location,
+        )
+        output_after_abort = completed_process.stdout.decode()
+        assert (
+            no_processes_msg in output_after_abort
+        ), "There are still processes running after abort"

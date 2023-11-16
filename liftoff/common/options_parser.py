@@ -96,6 +96,14 @@ class OptionParser:
             dest="do",
             help="Apply the actions (do not only simulate).",
         )
+        
+    def _add_skip_confirmation(self) -> None:
+        self.arg_parser.add_argument(
+            "--skip-confirmation",
+            action="store_true",
+            dest="skip_confirmation",
+            help="Skip user confirmation before executing.",
+        )
 
     def _add_crashed_only(self) -> None:
         self.arg_parser.add_argument(
