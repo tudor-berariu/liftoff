@@ -123,7 +123,8 @@ def abort_experiment(ppid, results_path, skip_confirmation=False):
     except Exception as e:
         print(f"Error terminating processes: {e}")
 
-    print("The eagle is down! Mission accomplished. ( ͡° ͜ʖ ͡°)")
+    # ( ͡° ͜ʖ ͡°)
+    print("The eagle is down! Mission accomplished.")
 
 
 def abort():

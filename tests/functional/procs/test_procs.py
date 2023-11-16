@@ -77,7 +77,7 @@ class TestProcsCLI:
             cwd=feature_test_location,
         )
 
-        time.sleep(2)  # A bit of delay to let the processes start
+        time.sleep(3)  # A bit of delay to let the processes start
 
         ## Check that there are 4 processes running, and they are shown
         command = ["liftoff-procs"]
@@ -93,7 +93,7 @@ class TestProcsCLI:
         # Decode the standard output to a string for regex matching
         output = completed_process.stdout.decode()
 
-        no_processes_msg = "No running liftoff processes"
+        no_processes_msg = "No running liftoff processes."
         if no_processes_msg in output:
             raise AssertionError("There does not seem to be any process running.")
 
@@ -152,5 +152,5 @@ class TestProcsCLI:
             output = completed_process.stdout.decode()
 
             assert (
-                "No running liftoff processes" in output
+                no_processes_msg in output
             ), "There are still running liftoff processes"

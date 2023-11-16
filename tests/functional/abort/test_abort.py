@@ -90,7 +90,7 @@ class TestAbortCLI:
         # Decode the standard output to a string for regex matching
         output = completed_process.stdout.decode()
 
-        no_processes_msg = "No running liftoff processes"
+        no_processes_msg = "No running liftoff processes."
         if no_processes_msg in output:
             raise AssertionError("There does not seem to be any process running.")
 
@@ -113,15 +113,18 @@ class TestAbortCLI:
             cwd=feature_test_location,
         )
 
-        # assert (
-        #     abort_process.returncode == 0
-        # ), "Abort command did not execute successfully"
+        assert (
+            abort_process.returncode == 0
+        ), "Abort command did not execute successfully, got return code:\n" + str(
+            abort_process.returncode
+        )
 
         abort_stdout = abort_process.stdout.decode()
         success_message = "The eagle is down! Mission accomplished."
-        assert (
-            success_message in abort_stdout
-        ), "Abort command did not print the expected success message, got:\n" + abort_stdout
+        assert success_message in abort_stdout, (
+            "Abort command did not print the expected success message, got:\n"
+            + abort_stdout
+        )
 
         # Check that the parent process is no longer running
         try:
@@ -130,7 +133,7 @@ class TestAbortCLI:
         except psutil.NoSuchProcess:
             pass  # Process is not running, which is expected
 
-        # Check that liftoff-procs returns 'No running liftoff processes'
+        # Check that liftoff-procs returns 'No running liftoff processes.'
         completed_process = run_cli_command(
             command=["liftoff-procs"],
             cwd=feature_test_location,

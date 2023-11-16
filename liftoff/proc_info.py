@@ -95,7 +95,7 @@ def display_procs(running):
                 for pid, name in info["procs"]:
                     print(f"      - {pid:5d} :: {name}")
     else:
-        print("No running liftoff processes")
+        print("No running liftoff processes.")
 
 
 def procs() -> None:
