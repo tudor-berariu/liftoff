@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2023.11.16
+
 ### Added
 
 - Code for WIndows compatibility in liftoff: launch_run
@@ -24,4 +26,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Path building in 'prepare.py' for cross compatibility with Windows
 - Some typos
 
-<!-- ## [0.4.0] - 2023.11.xx -->
+
