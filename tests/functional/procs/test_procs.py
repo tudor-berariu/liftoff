@@ -89,7 +89,7 @@ class TestProcsCLI:
         # Regex patterns for different levels
         top_level_pattern = rf"{re.escape(experiment_name_pattern)}"
         mid_level_pattern = rf"\n +\d+ :: [\w-]+ :: 2 running"
-        lowest_level_pattern = r"\n {6}- \d+ :: [\w\/]+"
+        lowest_level_pattern = r"\n\s+-\s+\d+\s+::\s+[\w_-]+"
 
         ## Check that there are 2 processes running, and they are shown
         command = ["liftoff-procs"]
@@ -117,15 +117,15 @@ class TestProcsCLI:
         # Assert that each pattern matches
         assert (
             top_level_match is not None
-        ), "Top level output does not match the expected format"
+        ), f"Top level output does not match the expected format, got {output}"
         assert (
             mid_level_match is not None
-        ), "Mid level output does not match the expected format"
+        ), f"Mid level output does not match the expected format, got {output}"
 
         # Assert that there are 2 matches for the lowest level
         assert (
             len(lowest_level_match) == 2
-        ), "Lowest level output does not match the expected format or not exactly 2 sub-experiments found"
+        ), f"Lowest level output does not match the expected format or not exactly 2 sub-experiments found, got {output}"
         
         # Wait for the 2nd round of processes to start, and check that again we find 2 processes
         time.sleep(9)
@@ -156,15 +156,15 @@ class TestProcsCLI:
         # Assert that each pattern matches
         assert (
             top_level_match is not None
-        ), "Top level output does not match the expected format"
+        ), f"Top level output does not match the expected format, got {output}"
         assert (
             mid_level_match is not None
-        ), "Mid level output does not match the expected format"
+        ), f"Mid level output does not match the expected format, got {output}"
 
         # Assert that there are 2 matches for the lowest level
         assert (
             len(lowest_level_match) == 2
-        ), "Lowest level output does not match the expected format or not exactly 2 sub-experiments found"
+        ), f"Lowest level output does not match the expected format or not exactly 2 sub-experiments found, got {output}"
 
         
         # Poll for a certain duration to check if the thread has completed
@@ -268,7 +268,7 @@ class TestProcsCLI:
         # Regex patterns for different levels
         top_level_pattern = rf"{re.escape(experiment_name_pattern)}"
         mid_level_pattern = rf"\n +\d+ :: [\w-]+ :: 4 running"
-        lowest_level_pattern = r"\n {6}- \d+ :: [\w\/]+"
+        lowest_level_pattern = r"\n\s+-\s+\d+\s+::\s+[\w_-]+"
 
         # Perform regex search for each level
         top_level_match = re.search(top_level_pattern, output)
@@ -278,15 +278,15 @@ class TestProcsCLI:
         # Assert that each pattern matches
         assert (
             top_level_match is not None
-        ), "Top level output does not match the expected format"
+        ), f"Top level output does not match the expected format, got {output}"
         assert (
             mid_level_match is not None
-        ), "Mid level output does not match the expected format"
+        ), f"Mid level output does not match the expected format, got {output}"
 
         # Assert that there are 4 matches for the lowest level
         assert (
             len(lowest_level_match) == 4
-        ), "Lowest level output does not match the expected format or not exactly 4 sub-experiments found"
+        ), f"Lowest level output does not match the expected format or not exactly 4 sub-experiments found, got {output}"
 
         # Poll for a certain duration to check if the thread has completed
         max_wait_seconds = 15  # Maximum seconds to wait for the thread to finish
