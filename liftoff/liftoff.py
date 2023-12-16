@@ -223,10 +223,12 @@ def launch_run(  # pylint: disable=bad-continuation
     # Unix-specific command setup
     if platform_is_windows:
         env_vars = os.environ.copy()
+        
         if gpu is not None:
             env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
         if end_by is not None:
             env_vars["ENDBY"] = str(end_by)
+            
         flags = "-u -OO" if optim else "-u"
         py_cmd = (
             [sys.executable, flags]
@@ -286,31 +288,27 @@ def launch_run(  # pylint: disable=bad-continuation
             env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
         if end_by is not None:
             env_vars += f" ENDBY={end_by}"
+            
         flags = "-u -OO" if optim else "-u"
-
         py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
-        cmd = (
-            (
-                f" date +%s 1> {start_path:s} 2>/dev/null &&"
-                f" nohup sh -c '{env_vars:s} {py_cmd:s}"
-                f" 2>{err_path:s} 1>{out_path:s}"
-                f" && date +%s > {end_path:s}"
-                f" || date +%s > {crash_path:s}'"
-                f" 1> {wrap_out_path} 2> {wrap_err_path}"
-                f" & echo $!"
-            )
-            if do_nohup
-            else (
-                f" date +%s 1> {start_path:s} 2>/dev/null &&"
-                f" sh -c '{env_vars:s} {py_cmd:s}"
-                f" 2>{err_path:s} 1>{out_path:s}"
-                f" && date +%s > {end_path:s}"
-                f" || date +%s > {crash_path:s}'"
-                f" 1>{wrap_out_path} 2>{wrap_err_path}"
-                f" & echo $!"
-            )
-        )
+        
+         # Common command prefix and suffix
+        cmd_prefix = f" date +%s 1> {start_path:s} 2>/dev/null &&"
+        cmd_suffix = f" 2>{err_path:s} 1>{out_path:s} && date +%s > {end_path:s}" \
+                    f" || date +%s > {crash_path:s} 1> {wrap_out_path} 2> {wrap_err_path}"
 
+        # Main command
+        main_cmd = f"'{env_vars:s} {py_cmd:s}"
+
+        # Construct the full command based on 'do_nohup'
+        if do_nohup:
+            cmd = f"{cmd_prefix} nohup sh -c {main_cmd} {cmd_suffix} & echo $!"
+        else:
+            cmd = f"{cmd_prefix} sh -c {main_cmd} {cmd_suffix} & echo $!"
+
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
+        sys.stdout.flush()
+    
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
         )

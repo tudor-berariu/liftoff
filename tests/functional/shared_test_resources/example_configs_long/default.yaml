@@ -1,0 +1,4 @@
+experiment: "liftoff_example_long_variable_names"
+a_long_variable_name_to_test_path_length_issues: 1
+b_long_variable_name_to_test_path_length_issues: 1
+c_long_variable_name_to_test_path_length_issues: 1
