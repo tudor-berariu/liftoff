@@ -15,11 +15,13 @@ def run(opts: Namespace) -> None:
         opts.full_title, log_file=os.path.join(opts.out_dir, "experiment_log.log")
     )
 
-    # time.sleep(10)
-    result = (opts.a + opts.b) * opts.c
+    if "a" in opts and "b" in opts and "c" in opts:
+        result = (opts.a + opts.b) * opts.c
+    else:
+        result = time.time()
 
     logger.info(f"Result is {result}")
-    
+
     return True
 
 

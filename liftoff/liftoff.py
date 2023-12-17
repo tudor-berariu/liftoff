@@ -214,6 +214,8 @@ def launch_run(  # pylint: disable=bad-continuation
     end_path = os.path.join(run_path, ".__end")
     crash_path = os.path.join(run_path, ".__crash")
 
+    flags = "-u -OO" if optim else "-u"
+    
     with open(cfg_path) as handler:
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
@@ -229,7 +231,6 @@ def launch_run(  # pylint: disable=bad-continuation
         if end_by is not None:
             env_vars["ENDBY"] = str(end_by)
             
-        flags = "-u -OO" if optim else "-u"
         py_cmd = (
             [sys.executable, flags]
             + py_script.split()
@@ -289,7 +290,6 @@ def launch_run(  # pylint: disable=bad-continuation
         if end_by is not None:
             env_vars += f" ENDBY={end_by}"
             
-        flags = "-u -OO" if optim else "-u"
         py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
         
          # Common command prefix and suffix

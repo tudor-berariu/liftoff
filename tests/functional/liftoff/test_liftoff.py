@@ -420,3 +420,75 @@ class TestLiftoffCLI:
             sub_subdir_path = os.path.join(subdir_path, sub_subdir)
             self._check_subdirectory_validity_crash(sub_subdir_path)
 
+    def test_multiple_experiments_long_variable_names_config_multiple_procs(self, method_scoped_directory):
+
+        ### Run liftoff-prepare command
+        config_directory = "example_configs_long"
+        config_folder_path = os.path.join(shared_resources_location, config_directory)
+
+        command = [
+            "liftoff-prepare",
+            config_folder_path,
+            "--results-path",
+            method_scoped_directory,
+            "--do",
+        ]
+        run_cli_command(command=command, cwd=feature_test_location)
+        
+        subdirs = [
+            d
+            for d in os.listdir(method_scoped_directory)
+            if os.path.isdir(os.path.join(method_scoped_directory, d))
+        ]
+        # Check that there is exactly one subdirectory
+        assert len(subdirs) == 1, "There should be exactly one subdirectory"
+
+        ### Now actually run the liftoff command
+        
+        script_name = "example_experiment.py"
+        procs_no = 8
+        exp_path = os.path.join(method_scoped_directory, subdirs[0])
+        
+        command = [
+            "liftoff",
+            script_name,
+            exp_path,
+            "--procs-no", 
+            str(procs_no)
+        ]
+        run_cli_command(
+            command=command,
+            cwd=feature_test_location,
+        )
+        
+        ### Check the outptus in each subdir of the results
+        
+        # Define the regex pattern for the folder name
+        date_pattern = re.compile(r"\d{4}[A-Za-z]{3}\d{2}-\d{6}")
+
+        # Check if the subdirectory name matches the date format
+        subdir_name = subdirs[0]
+        assert date_pattern.match(
+            subdir_name
+        ), "Folder name does not match the expected date-time format"
+
+        # Path to the subdirectory
+        subdir_path = os.path.join(method_scoped_directory, subdir_name)
+
+        # List all subdirectories in the found subdirectory
+        sub_subdirs = [
+            d
+            for d in os.listdir(subdir_path)
+            if os.path.isdir(os.path.join(subdir_path, d))
+        ]
+
+        # Check that there are exactly 4 sub-subdirectories (nr of parameter combinations)
+        assert (
+            len(sub_subdirs) == 16
+        ), f"Expected 16 subdirectories in {subdir_name}, found {len(sub_subdirs)}"
+
+        assert ".__experiment" in os.listdir(subdir_path)
+
+        for sub_subdir in sub_subdirs:
+            sub_subdir_path = os.path.join(subdir_path, sub_subdir)
+            self._check_subdirectory_validity_1(sub_subdir_path)
