@@ -313,6 +313,7 @@ def launch_run(  # pylint: disable=bad-continuation
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
         )
         (out, err) = proc.communicate()
+        err = err.decode("utf-8").strip()
         if err:
             print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
         pid = int(out.decode("utf-8").strip())
