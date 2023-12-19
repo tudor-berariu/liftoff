@@ -295,7 +295,7 @@ def launch_run(  # pylint: disable=bad-continuation
          # Common command prefix and suffix
         cmd_prefix = f" date +%s 1> {start_path:s} 2>/dev/null &&"
         cmd_suffix = f" 2>{err_path:s} 1>{out_path:s} && date +%s > {end_path:s}" \
-                    f" || date +%s > {crash_path:s} 1> {wrap_out_path} 2> {wrap_err_path}"
+                    f" || date +%s > {crash_path:s}' 1> {wrap_out_path} 2> {wrap_err_path}"
 
         # Main command
         main_cmd = f"'{env_vars:s} {py_cmd:s}"
