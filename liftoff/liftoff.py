@@ -34,10 +34,6 @@ class LiftoffResources:
         self.gpus = opts.gpus
         self.procs_no = opts.procs_no
 
-        # Used in windows implementation
-        self.pid_dict = {}
-        self.pid_events = {}
-
         if self.gpus:
             if len(opts.gpus) == len(opts.per_gpu):
                 self.per_gpu = {g: int(n) for g, n in zip(opts.gpus, opts.per_gpu)}
@@ -162,14 +158,27 @@ def parse_options() -> Namespace:
 def get_command_for_pid(pid: int) -> str:
     """Returns the command for a pid if that process exists."""
     try:
-        process = psutil.Process(pid)
-        return " ".join(process.cmdline())
-    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-        # Process does not exist or access is denied
+        if platform.system() == "Windows":
+            process = psutil.Process(pid)
+            return " ".join(process.cmdline())
+        else:
+            result = subprocess.run(
+                f"ps -p {pid:d} -o cmd h",
+                stdout=subprocess.PIPE,
+                shell=True,
+                check=True,
+            )
+            return result.stdout.decode("utf-8").strip()
+    except (
+        subprocess.CalledProcessError,
+        psutil.NoSuchProcess,
+        psutil.AccessDenied,
+        psutil.ZombieProcess,
+    ):
         return ""
 
 
-def still_active(pid: int, cmd) -> bool:
+def still_active(pid: int, cmd: str) -> bool:
     """Checks if a subprocess is still active."""
     if isinstance(cmd, list):
         cmd = " ".join(cmd)  # Convert list to string
@@ -193,6 +202,63 @@ def lock_file(lock_path: str, session_id: str) -> bool:
     return False
 
 
+def run_experiment_in_subprocess_windows(
+    py_cmd,
+    env_vars,
+    start_path,
+    out_path,
+    err_path,
+    end_path,
+    crash_path,
+    pid_dict,
+    pid_event,
+):
+    """
+    Function to execute the experiment subprocess in a separate thread.
+    Used for Windows based systems to emulate the pre-existing Unix behaviour.
+    """
+    proc = None
+    try:
+        with open(start_path, "w") as f:
+            f.write(str(int(time.time())))
+
+        with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
+            proc = subprocess.Popen(
+                py_cmd, stdout=out_file, stderr=err_file, env=env_vars, shell=True
+            )
+
+        pid_dict["pid"] = proc.pid
+        pid_event.set()
+
+        # Wait for the process to complete
+        proc.wait()
+
+        # Write to the end file or crash file based on the process return code
+        if proc.returncode != 0:
+            with open(crash_path, "w") as f:
+                f.write(str(int(time.time())))
+            print(
+                f"Process {proc.pid} terminated unexpectedly with return code {proc.returncode}"
+            )
+        else:
+            with open(end_path, "w") as f:
+                f.write(str(int(time.time())))
+                
+    except Exception as e:
+        print(f"An error occurred in run_experiment: {e}")
+        if proc and proc.poll() is None:
+            proc.terminate()  # Safely terminate the subprocess if it's still running
+        if not pid_event.is_set():
+            pid_dict['pid'] = None
+            pid_event.set()
+            
+    finally:
+        # This block ensures that the thread will terminate
+        # even if an exception occurs
+        if proc and proc.poll() is None:
+            proc.terminate()
+
+
 def launch_run(  # pylint: disable=bad-continuation
     run_path,
     py_script,
@@ -201,7 +267,6 @@ def launch_run(  # pylint: disable=bad-continuation
     do_nohup=True,
     optim=False,
     end_by=None,
-    resources=None,
 ):
     """Here we launch a run from an experiment.
     This might be the most important function here.
@@ -215,7 +280,7 @@ def launch_run(  # pylint: disable=bad-continuation
     crash_path = os.path.join(run_path, ".__crash")
 
     flags = "-u -OO" if optim else "-u"
-    
+
     with open(cfg_path) as handler:
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
@@ -225,60 +290,46 @@ def launch_run(  # pylint: disable=bad-continuation
     # Unix-specific command setup
     if platform_is_windows:
         env_vars = os.environ.copy()
-        
+
         if gpu is not None:
             env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
         if end_by is not None:
             env_vars["ENDBY"] = str(end_by)
-            
+
         py_cmd = (
             [sys.executable, flags]
             + py_script.split()
             + [cfg_path, "--session-id", session_id]
         )
+        py_cmd_str = " ".join(map(str, py_cmd))
 
-        # Write the start time
-        with open(start_path, "w") as f:
-            f.write(str(int(time.time())))
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{py_cmd_str:s}")
+        sys.stdout.flush()
 
-        experiment_id = f"({title}):({int(time.time())})"
-        resources.pid_events[experiment_id] = threading.Event()
-
-        # Function to execute the subprocess
-        def run_experiment(exp_id):
-            with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
-                proc = subprocess.Popen(
-                    py_cmd, stdout=out_file, stderr=err_file, env=env_vars
-                )
-
-                # Store the PID and signal main branch can continue
-                resources.pid_dict[exp_id] = proc.pid
-                resources.pid_events[exp_id].set()
-
-                # Wait for the process to complete
-                proc.wait()
-
-                # Check if the process terminated unexpectedly
-                if proc.returncode != 0:
-                    with open(crash_path, "w") as f:
-                        f.write(str(int(time.time())))
-                    print(
-                        f"Process {proc.pid} terminated unexpectedly with return code {proc.returncode}"
-                    )
-                else:
-                    # Write to the end file if the process completes successfully
-                    with open(end_path, "w") as f:
-                        f.write(str(int(time.time())))
+        pid_dict = {}
+        pid_event = threading.Event()
 
         # Launch the subprocess in a separate thread
         experiment_thread = threading.Thread(
-            target=run_experiment, args=(experiment_id,)
+            target=run_experiment_in_subprocess_windows,
+            args=(
+                py_cmd,
+                env_vars,
+                start_path,
+                out_path,
+                err_path,
+                end_path,
+                crash_path,
+                pid_dict,
+                pid_event,
+            ),
         )
         experiment_thread.start()
 
-        # Wait for the PID to be available and store it
-        resources.pid_events[experiment_id].wait()
-        pid = resources.pid_dict[experiment_id]
+        # Wait for the PID to be set
+        pid_event.wait()
+
+        pid = pid_dict.get("pid")
 
     else:
         wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
@@ -289,29 +340,32 @@ def launch_run(  # pylint: disable=bad-continuation
             env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
         if end_by is not None:
             env_vars += f" ENDBY={end_by}"
-            
-        py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
-        
-         # Common command prefix and suffix
-        cmd_prefix = f" date +%s 1> {start_path:s} 2>/dev/null &&"
-        cmd_suffix = f" 2>{err_path:s} 1>{out_path:s} && date +%s > {end_path:s}" \
-                    f" || date +%s > {crash_path:s}' 1> {wrap_out_path} 2> {wrap_err_path}"
 
-        # Main command
-        main_cmd = f"'{env_vars:s} {py_cmd:s}"
+        cmd_prefix = f" date +%s 1> {start_path:s} 2>/dev/null &&"
+
+        py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
+        main_cmd = (
+            f"'{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s} && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}' 1> {wrap_out_path} 2> {wrap_err_path} & echo $!"
+        )
 
         # Construct the full command based on 'do_nohup'
         if do_nohup:
-            cmd = f"{cmd_prefix} nohup sh -c {main_cmd} {cmd_suffix} & echo $!"
+            cmd = f"{cmd_prefix} nohup sh -c {main_cmd}"
         else:
-            cmd = f"{cmd_prefix} sh -c {main_cmd} {cmd_suffix} & echo $!"
+            cmd = f"{cmd_prefix} sh -c {main_cmd}"
 
         print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
         sys.stdout.flush()
-    
+
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
+        sys.stdout.flush()
+
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
         )
+
         (out, err) = proc.communicate()
         err = err.decode("utf-8").strip()
         if err:
@@ -320,6 +374,7 @@ def launch_run(  # pylint: disable=bad-continuation
 
     print(f"[{time.strftime(time.ctime())}] New PID is {pid}.")
     sys.stdout.flush()
+
     return pid, gpu, title, py_cmd
 
 
@@ -434,7 +489,6 @@ def launch_experiment(opts):
                     do_nohup=not opts.no_detach,
                     optim=opts.optimize,
                     end_by=end_by,
-                    resources=resources,
                 )
                 active_pids.append(info + (lock_path,))
                 resources.allocate(gpu=next_gpu)
