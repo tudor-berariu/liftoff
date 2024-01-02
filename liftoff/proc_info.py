@@ -18,38 +18,49 @@ def parse_options() -> Namespace:
     return opt_parser.parse_args()
 
 
-def get_running_liftoffs():
-    """Get the running liftoff processes."""
-    running = {}
+def is_liftoff_main_process(cmdline):
+    """Check if the process is a main liftoff process."""
+    return "liftoff.exe" in " ".join(cmdline).lower()
 
-    for proc in psutil.process_iter(["pid", "ppid", "cmdline"]):
+
+def get_running_liftoffs():
+    running = {}
+    main_process_pids = set()
+
+    # First pass: Identify all liftoff main processes
+    for proc in psutil.process_iter(["pid", "cmdline"]):
         try:
             cmdline = proc.cmdline()
-            # Check if 'liftoff' is part of the command line
-            if any("liftoff" in cmd_part for cmd_part in cmdline):
+            if is_liftoff_main_process(cmdline):
+                main_process_pids.add(proc.pid)
+                running[proc.pid] = {
+                    "procs": [],
+                    "experiment": None,
+                }
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+
+    # Second pass: Associate subprocesses with main liftoff process
+    for proc in psutil.process_iter(["pid", "ppid", "cmdline"]):
+        try:
+            parent_pid = proc.ppid()
+            cmdline = proc.cmdline()
+            if (
+                "--session-id" in " ".join(cmdline).lower()
+                and parent_pid in main_process_pids
+            ):
                 session_id = extract_session_id(cmdline)
-                if not session_id:
-                    continue
-
                 experiment_name, sub_experiment_name = extract_experiment_name(cmdline)
+                subprocess_info = {
+                    "pid": proc.pid,
+                    "session_id": session_id,
+                    "experiment_name": sub_experiment_name,
+                }
+                running[parent_pid]["procs"].append(subprocess_info)
 
-                # Aggregate subprocesses under the parent process
-                parent_pid = proc.ppid()
-                subprocess_info = (proc.pid, sub_experiment_name)
-                # Add main experiments
-                if experiment_name not in running:
-                    running[experiment_name] = {}
-                    
-                # Add the pid associated with the main experiment
-                if parent_pid not in running[experiment_name]:
-                    running[experiment_name][parent_pid] = {
-                        "session": session_id,
-                        "procs": [],
-                    }
-                    
-                # Add subexperiments
-                running[experiment_name][parent_pid]["procs"].append(subprocess_info)
-
+                # Optionally update the experiment name for the main process
+                if not running[parent_pid]["experiment"] and experiment_name:
+                    running[parent_pid]["experiment"] = experiment_name
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue
 
@@ -58,42 +69,58 @@ def get_running_liftoffs():
 
 def extract_session_id(cmdline):
     """Extract session ID from the command line arguments."""
+    cmdline_str = " ".join(cmdline)  # Convert cmdline list to a single string
     try:
-        # Find the index of '--session-id' in the command line arguments
-        index = cmdline.index("--session-id")
-        # Return the element following '--session-id', which is the session ID
-        return cmdline[index + 1] if index < len(cmdline) - 1 else None
+        # Split the command line string by spaces and search for '--session-id'
+        parts = cmdline_str.split()
+        if "--session-id" in parts:
+            index = parts.index("--session-id")
+            return parts[index + 1] if index < len(parts) - 1 else None
     except ValueError:
-        # '--session-id' not found in cmdline
-        return None
+        pass
+    return None
 
 
 def extract_experiment_name(cmdline):
     """Extract experiment name from the command line arguments."""
-    for part in cmdline:
-        if part.endswith(".yaml"):
-            path_parts = part.split(os.path.sep)
-            # Assuming the main experiment name is two levels up from the .yaml file
+    cmdline_str = " ".join(cmdline)
+    try:
+        # Find the part of the command line string that ends with '.yaml'
+        yaml_path = next(
+            (part for part in cmdline_str.split() if part.endswith(".yaml")), None
+        )
+        if yaml_path:
+            path_parts = yaml_path.split(os.path.sep)
             main_experiment = path_parts[-4]
-            # Assuming the sub-experiment names are one and two levels up from the .yaml file
             sub_experiment_1 = path_parts[-3]
             sub_experiment_2 = path_parts[-2]
             return main_experiment, f"{sub_experiment_1}{os.path.sep}{sub_experiment_2}"
+    except IndexError:
+        # Handle cases where the path does not have the expected number of parts
+        print(f"Warning: Unexpected path format for experiment in cmdline: {cmdline}")
     return None, None
 
 
 def display_procs(running):
     """Display the running liftoff processes."""
     if running:
-        for experiment_name, parent_procs in running.items():
-            print(clr(experiment_name, attrs=["bold"]))
-            for ppid, info in parent_procs.items():
-                nrunning = clr(f"{len(info['procs']):d}", color="blue", attrs=["bold"])
-                ppid_formatted = clr(f"{ppid:5d}", color="red", attrs=["bold"])
-                session_str = info["session"] if info["session"] is not None else "N/A"
-                print(f"   {ppid_formatted} :: {session_str} :: {nrunning} running")
-                for pid, name in info["procs"]:
-                    print(f"      - {pid:5d} :: {name}")
+        for main_pid, main_proc_info in running.items():
+            # Format the main process ID
+            main_pid_formatted = clr(f"{main_pid:5d}", color="red", attrs=["bold"])
+            experiment_name = main_proc_info.get("experiment", "N/A")
+            
+            # Print the main process information
+            print(f"{main_pid_formatted} :: {experiment_name} :: {len(main_proc_info['procs'])} running")
+
+            # Iterate and display each subprocess
+            for subproc in main_proc_info["procs"]:
+                sub_pid = subproc.get("pid")
+                session_id = subproc.get("session_id", "N/A")
+                sub_experiment_name = subproc.get("experiment_name", "N/A")
+
+                # Format the subprocess information
+                sub_pid_formatted = clr(f"{sub_pid:5d}", color="blue", attrs=["bold"])
+                print(f"      - {sub_pid_formatted} :: {sub_experiment_name}")
     else:
         print("No running liftoff processes.")
 

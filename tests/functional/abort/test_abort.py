@@ -95,9 +95,9 @@ class TestAbortCLI:
             raise AssertionError("There does not seem to be any process running.")
 
         # Extract the parent process ID
-        parent_pid_pattern = r"\n +(\d+) :: "
-        parent_pid_match = re.search(parent_pid_pattern, output)
-        assert parent_pid_match, "Parent process ID not found in the output"
+        parent_pid_pattern = r"\s*(\d+)\s+::"
+        parent_pid_match = re.search(parent_pid_pattern, output, re.MULTILINE)
+        assert parent_pid_match, f"Parent process ID not found in the output, got output {output}"
         parent_pid = int(parent_pid_match.group(1))
 
         # Abort the parent process ID

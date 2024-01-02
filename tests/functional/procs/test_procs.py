@@ -1,6 +1,3 @@
-"""Warning: these tests seem to sometimes fail,
-probably due to race conditions."""
-
 import pytest
 import os
 import re
@@ -88,7 +85,7 @@ class TestProcsCLI:
         
         # Regex patterns for different levels
         top_level_pattern = rf"{re.escape(experiment_name_pattern)}"
-        mid_level_pattern = rf"\n +\d+ :: [\w-]+ :: 2 running"
+        mid_level_pattern = rf"\s+\d+\s+::\s+{re.escape(experiment_name_pattern)}\s+::\s+2 running"
         lowest_level_pattern = r"\n\s+-\s+\d+\s+::\s+[\w_-]+"
 
         ## Check that there are 2 processes running, and they are shown
@@ -267,7 +264,7 @@ class TestProcsCLI:
 
         # Regex patterns for different levels
         top_level_pattern = rf"{re.escape(experiment_name_pattern)}"
-        mid_level_pattern = rf"\n +\d+ :: [\w-]+ :: 4 running"
+        mid_level_pattern = rf"\s+\d+\s+::\s+{re.escape(experiment_name_pattern)}\s+::\s+4 running"
         lowest_level_pattern = r"\n\s+-\s+\d+\s+::\s+[\w_-]+"
 
         # Perform regex search for each level
