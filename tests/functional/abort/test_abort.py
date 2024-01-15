@@ -125,7 +125,9 @@ class TestAbortCLI:
             "Abort command did not print the expected success message, got:\n"
             + abort_stdout
         )
-
+        
+        time.sleep(1)
+        
         # Check that the parent process is no longer running
         try:
             psutil.Process(parent_pid)
