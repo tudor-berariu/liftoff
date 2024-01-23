@@ -8,3 +8,16 @@ Run the tests from the project root folder with:
 ```
 python -m pytest tests 
 ```
+
+## Example command for manual run:
+
+### Prepare
+```
+liftoff-prepare /mnt/d/Work/repos/liftoff/tests/functional/shared_test_resources/example_configs_1 --do
+```
+
+### Liftoff
+```
+liftoff example_experiment.py ./results/2024Jan22-233400_example_configs_1 --procs-no 2
+```
+

@@ -192,7 +192,7 @@ class TestProcsCLI:
             # Ensure the command execution was successful
             assert (
                 completed_process.returncode == 0
-            ), "Liftoff command did not execute successfully"
+            ), "Liftoff-procs command did not execute successfully"
 
             # Decode the standard output to a string for regex matching
             output = completed_process.stdout.decode()
@@ -255,7 +255,7 @@ class TestProcsCLI:
 
         assert (
             completed_process.returncode == 0
-        ), "Liftoff command did not execute successfully"
+        ), "Liftoff-procs command did not execute successfully"
 
         # Decode the standard output to a string for regex matching
         output = completed_process.stdout.decode()
@@ -313,7 +313,7 @@ class TestProcsCLI:
             # Ensure the command execution was successful
             assert (
                 completed_process.returncode == 0
-            ), "Liftoff command did not execute successfully"
+            ), "Liftoff-procs command did not execute successfully"
 
             # Decode the standard output to a string for regex matching
             output = completed_process.stdout.decode()

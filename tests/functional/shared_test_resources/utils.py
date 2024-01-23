@@ -38,14 +38,18 @@ def setup_logger(name, log_file=None, level=logging.INFO):
 
     return logger
 
+
 def run_cli_command(command: List[str], cwd: str) -> subprocess.CompletedProcess:
     # Run the CLI command and return the output
+    command = " ".join(command) # Need to join command so it can run on Linux systems
     return subprocess.run(
         command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
-    
+
+
 def run_cli_command_non_blocking(command: List[str], cwd: str):
     """Run the CLI command in a non-blocking manner and return the thread."""
+    command = " ".join(command) # Need to join command so it can run on Linux systems
     def target():
         subprocess.run(
             command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
@@ -54,6 +58,7 @@ def run_cli_command_non_blocking(command: List[str], cwd: str):
     thread = threading.Thread(target=target)
     thread.start()
     return thread
+
 
 def clean_up_directory(directory_path):
     if os.path.exists(directory_path):
@@ -65,6 +70,4 @@ def clean_up_directory(directory_path):
                 elif os.path.isdir(file_path):
                     shutil.rmtree(file_path)
             except Exception as e:
-                print(f'Failed to delete {file_path}. Reason: {e}')
-
-
+                print(f"Failed to delete {file_path}. Reason: {e}")
