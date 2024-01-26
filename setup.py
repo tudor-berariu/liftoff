@@ -6,11 +6,10 @@
 from setuptools import setup, find_packages
 
 
-VERSION = "0.3.3"  # single source of truth
+VERSION = "0.4.2"  # single source of truth
 print("-- Installing liftoff " + VERSION)
 with open("./liftoff/version.py", "w") as f:
     f.write("__version__ = '{}'\n".format(VERSION))
-
 
 setup(
     name="liftoff",
@@ -40,6 +39,7 @@ setup(
         "tabulate",
         "termcolor",
         "pyperclip",
+        "psutil",
     ],
     zip_safe=False,
 )

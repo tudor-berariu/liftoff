@@ -8,6 +8,9 @@ import subprocess
 import sys
 import time
 import traceback
+import psutil
+import platform
+import threading
 from argparse import Namespace
 from functools import partial
 from importlib import import_module
@@ -37,7 +40,7 @@ class LiftoffResources:
             elif len(opts.per_gpu) == 1:
                 self.per_gpu = {g: int(opts.per_gpu[0]) for g in opts.gpus}
             else:
-                raise ValueError("Strage per_gpu values. {opts.per_gpu}")
+                raise ValueError(f"Strange per_gpu values. {opts.per_gpu}")
         else:
             self.per_gpu = None
 
@@ -49,6 +52,7 @@ class LiftoffResources:
         """Here we process some commands we got from god knows where that
         might change the way we want to allocate resources.
         """
+        pass
 
     def free(self, gpu=None):
         """Here we inform that some process ended, maybe on a specific gpu."""
@@ -154,16 +158,31 @@ def parse_options() -> Namespace:
 def get_command_for_pid(pid: int) -> str:
     """Returns the command for a pid if that process exists."""
     try:
-        result = subprocess.run(
-            f"ps -p {pid:d} -o cmd h", stdout=subprocess.PIPE, shell=True
-        )
-        return result.stdout.decode("utf-8").strip()
-    except subprocess.CalledProcessError as _e:
+        if platform.system() == "Windows":
+            process = psutil.Process(pid)
+            return " ".join(process.cmdline())
+        else:
+            result = subprocess.run(
+                f"ps -p {pid:d} -o cmd h",
+                stdout=subprocess.PIPE,
+                shell=True,
+                check=True,
+            )
+            return result.stdout.decode("utf-8").strip()
+    except (
+        subprocess.CalledProcessError,
+        psutil.NoSuchProcess,
+        psutil.AccessDenied,
+        psutil.ZombieProcess,
+    ):
         return ""
 
 
 def still_active(pid: int, cmd: str) -> bool:
     """Checks if a subprocess is still active."""
+    if isinstance(cmd, list):
+        cmd = " ".join(cmd)  # Convert list to string
+
     os_cmd = get_command_for_pid(pid)
     return cmd in os_cmd
 
@@ -183,69 +202,179 @@ def lock_file(lock_path: str, session_id: str) -> bool:
     return False
 
 
+def run_experiment_in_subprocess_windows(
+    py_cmd,
+    env_vars,
+    start_path,
+    out_path,
+    err_path,
+    end_path,
+    crash_path,
+    pid_dict,
+    pid_event,
+):
+    """
+    Function to execute the experiment subprocess in a separate thread.
+    Used for Windows based systems to emulate the pre-existing Unix behaviour.
+    """
+    proc = None
+    try:
+        with open(start_path, "w") as f:
+            f.write(str(int(time.time())))
+
+        with open(err_path, "w") as err_file, open(out_path, "w") as out_file:
+            proc = subprocess.Popen(
+                py_cmd, stdout=out_file, stderr=err_file, env=env_vars, shell=True
+            )
+
+        pid_dict["pid"] = proc.pid
+        pid_event.set()
+
+        # Wait for the process to complete
+        proc.wait()
+
+        # Write to the end file or crash file based on the process return code
+        if proc.returncode != 0:
+            with open(crash_path, "w") as f:
+                f.write(str(int(time.time())))
+            print(
+                f"Process {proc.pid} terminated unexpectedly with return code {proc.returncode}"
+            )
+        else:
+            with open(end_path, "w") as f:
+                f.write(str(int(time.time())))
+                
+    except Exception as e:
+        print(f"An error occurred in run_experiment: {e}")
+        if proc and proc.poll() is None:
+            proc.terminate()  # Safely terminate the subprocess if it's still running
+        if not pid_event.is_set():
+            pid_dict['pid'] = None
+            pid_event.set()
+            
+    finally:
+        # This block ensures that the thread will terminate
+        # even if an exception occurs
+        if proc and proc.poll() is None:
+            proc.terminate()
+
+
 def launch_run(  # pylint: disable=bad-continuation
-    run_path, py_script, session_id, gpu=None, do_nohup=True, optim=False, end_by=None
+    run_path,
+    py_script,
+    session_id,
+    gpu=None,
+    do_nohup=True,
+    optim=False,
+    end_by=None,
 ):
     """Here we launch a run from an experiment.
     This might be the most important function here.
     """
+    # Common path setup
     err_path = os.path.join(run_path, "err")
     out_path = os.path.join(run_path, "out")
-    wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
-    wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
     cfg_path = os.path.join(run_path, "cfg.yaml")
     start_path = os.path.join(run_path, ".__start")
     end_path = os.path.join(run_path, ".__end")
     crash_path = os.path.join(run_path, ".__crash")
-    env_vars = ""
+
+    flags = "-u -OO" if optim else "-u"
 
     with open(cfg_path) as handler:
         title = yaml.load(handler, Loader=yaml.SafeLoader)["title"]
 
-    if gpu is not None:
-        env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
+    # Determine the platform
+    platform_is_windows = platform.system() == "Windows"
 
-    if end_by is not None:
-        env_vars += f" ENDBY={end_by}"
+    # Unix-specific command setup
+    if platform_is_windows:
+        env_vars = os.environ.copy()
 
-    flags = "-u -OO" if optim else "-u"
+        if gpu is not None:
+            env_vars["CUDA_VISIBLE_DEVICES"] = str(gpu)
+        if end_by is not None:
+            env_vars["ENDBY"] = str(end_by)
 
-    py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
-
-    if do_nohup:
-        cmd = (
-            f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            f" nohup sh -c '{env_vars:s} {py_cmd:s}"
-            f" 2>{err_path:s} 1>{out_path:s}"
-            f" && date +%s > {end_path:s}"
-            f" || date +%s > {crash_path:s}'"
-            f" 1> {wrap_out_path} 2> {wrap_err_path}"
-            f" & echo $!"
+        py_cmd = (
+            [sys.executable, flags]
+            + py_script.split()
+            + [cfg_path, "--session-id", session_id]
         )
+        py_cmd_str = " ".join(map(str, py_cmd))
+
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{py_cmd_str:s}")
+        sys.stdout.flush()
+
+        pid_dict = {}
+        pid_event = threading.Event()
+
+        # Launch the subprocess in a separate thread
+        experiment_thread = threading.Thread(
+            target=run_experiment_in_subprocess_windows,
+            args=(
+                py_cmd,
+                env_vars,
+                start_path,
+                out_path,
+                err_path,
+                end_path,
+                crash_path,
+                pid_dict,
+                pid_event,
+            ),
+        )
+        experiment_thread.start()
+
+        # Wait for the PID to be set
+        pid_event.wait()
+
+        pid = pid_dict.get("pid")
+
     else:
-        cmd = (
-            f" date +%s 1> {start_path:s} 2>/dev/null &&"
-            f" sh -c '{env_vars:s} {py_cmd:s}"
-            f" 2>{err_path:s} 1>{out_path:s}"
-            f" && date +%s > {end_path:s}"
-            f" || date +%s > {crash_path:s}'"
-            f" 1>{wrap_out_path} 2>{wrap_err_path}"
-            f" & echo $!"
+        wrap_err_path = os.path.join(run_path, "nohup.err" if do_nohup else "sh.err")
+        wrap_out_path = os.path.join(run_path, "nohup.out" if do_nohup else "sh.out")
+        env_vars = ""
+
+        if gpu is not None:
+            env_vars = f"CUDA_VISIBLE_DEVICES={gpu} {env_vars:s}"
+        if end_by is not None:
+            env_vars += f" ENDBY={end_by}"
+
+        cmd_prefix = f" date +%s 1> {start_path:s} 2>/dev/null &&"
+
+        py_cmd = f"python {flags} {py_script:s} {cfg_path:s} --session-id {session_id}"
+        main_cmd = (
+            f"'{env_vars:s} {py_cmd:s}"
+            f" 2>{err_path:s} 1>{out_path:s} && date +%s > {end_path:s}"
+            f" || date +%s > {crash_path:s}' 1> {wrap_out_path} 2> {wrap_err_path} & echo $!"
         )
 
-    print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
+        # Construct the full command based on 'do_nohup'
+        if do_nohup:
+            cmd = f"{cmd_prefix} nohup sh -c {main_cmd}"
+        else:
+            cmd = f"{cmd_prefix} sh -c {main_cmd}"
+
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
+        sys.stdout.flush()
+
+        print(f"[{time.strftime(time.ctime())}] Command to be run:\n{cmd:s}")
+        sys.stdout.flush()
+
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
+        )
+
+        (out, err) = proc.communicate()
+        err = err.decode("utf-8").strip()
+        if err:
+            print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
+        pid = int(out.decode("utf-8").strip())
+
+    print(f"[{time.strftime(time.ctime())}] New PID is {pid}.")
     sys.stdout.flush()
 
-    proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
-    (out, err) = proc.communicate()
-    err = err.decode("utf-8").strip()
-    if err:
-        print(f"[{time.strftime(time.ctime())}] Some error: {clr(err, 'red'):s}.")
-    pid = int(out.decode("utf-8").strip())
-    print(f"[{time.strftime(time.ctime())}] New PID is {pid:d}.")
-    sys.stdout.flush()
     return pid, gpu, title, py_cmd
 
 
@@ -394,10 +523,8 @@ def launch_experiment(opts):
 
 def systime_to(timestamp_file_path: str) -> None:
     """Write current system time to a file."""
-    cmd = f"date +%s 1> {timestamp_file_path:s}"
-    proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, shell=True)
-    (_, err) = proc.communicate()
-    return err.decode("utf-8").strip()
+    with open(timestamp_file_path, "w") as file:
+        file.write(str(int(time.time())))
 
 
 def wrapper(function: Callable[[Namespace], None], args: Namespace) -> None:
@@ -495,6 +622,10 @@ def check_opts_integrity(opts):
 def launch() -> None:
     """Main function."""
     opts = parse_options()
+
+    if (not os.path.isdir(opts.config_path)) and (not os.path.isfile(opts.config_path)):
+        raise FileNotFoundError(f"Cannot find path: {opts.config_path}")
+
     if is_experiment(opts.config_path):
         opts.experiment_path = opts.config_path
         check_opts_integrity(opts)

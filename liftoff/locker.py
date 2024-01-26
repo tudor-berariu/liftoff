@@ -133,7 +133,7 @@ def change_experiment_lock_status(opts, unlock=False):
 
     if not opts.do:
         print(
-            "\nThis was just a simultation. Rerun with",
+            "\nThis was just a simulation. Rerun with",
             clr("--do", attrs=["bold"]),
             "to lock/unlock the experiment for real.",
         )
