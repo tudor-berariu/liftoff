@@ -3,7 +3,7 @@
 
 import os.path
 import yaml
-from .common.dict_utils import dict_to_namespace
+from .common.liftopt import LO
 from .common.options_parser import OptionParser
 from .version import __version__  # pylint: disable=import-error
 
@@ -24,7 +24,7 @@ def parse_opts():
     opts = opt_parser.parse_args()
     with open(opts.config_path) as handler:
         config_data = yaml.load(handler, Loader=yaml.SafeLoader)
-    opts = dict_to_namespace(config_data)
+    opts = LO.from_dict(config_data)
     if not hasattr(opts, "out_dir"):
         raise RuntimeError("No out_dir in config file.")
     if not os.path.isdir(opts.out_dir):  # pylint: disable=no-member
