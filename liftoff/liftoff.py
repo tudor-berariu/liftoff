@@ -17,7 +17,7 @@ from typing import Callable, List
 import yaml
 from termcolor import colored as clr
 
-from .common.dict_utils import dict_to_namespace
+from .common.liftopt import LO
 from .common.experiment_info import is_experiment, is_yaml, experiment_matches
 from .common.options_parser import OptionParser
 from .prepare import parse_options as prepare_parse_options
@@ -458,7 +458,7 @@ def run_here(opts):
         if os.path.isfile(leaf_path):
             with open(cfg_path) as handler:
                 cfg = yaml.load(handler, Loader=yaml.SafeLoader)
-            args = dict_to_namespace(cfg)
+            args = LO.from_dict(cfg)
             print(clr("\nStarting\n", attrs=["bold"]))
             get_function(opts)(args)
     else:
@@ -479,7 +479,7 @@ def run_here(opts):
                         if os.path.isfile(leaf_path):
                             with open(cfg_path) as handler:
                                 cfg = yaml.load(handler, Loader=yaml.SafeLoader)
-                            args = dict_to_namespace(cfg)
+                            args = LO.from_dict(cfg)
                             print(clr("\nStarting\n", attrs=["bold"]))
                             get_function(opts)(args)
 
