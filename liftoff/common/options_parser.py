@@ -4,7 +4,7 @@
     TODO: change to class methods to common methods if there is no need to call
         those functions outside an instance of OptionParser.
 """
-
+import os
 from argparse import ArgumentParser, Namespace
 from typing import List
 import uuid
@@ -22,8 +22,9 @@ class OptionParser:
         self.arg_parser = ArgumentParser(name)
         self.arguments = [str(arg) for arg in arguments]
 
-        for arg in self.arguments:
-            getattr(self, f"_add_{arg:s}")()
+        if self.arguments:
+            for arg in self.arguments:
+                getattr(self, f"_add_{arg:s}")()
 
     def parse_args(self, args: List[str] = None, strict: bool = True) -> Namespace:
         """ Parses command-line arguments and completes options with values
@@ -94,6 +95,14 @@ class OptionParser:
             action="store_true",
             dest="do",
             help="Apply the actions (do not only simulate).",
+        )
+        
+    def _add_skip_confirmation(self) -> None:
+        self.arg_parser.add_argument(
+            "--skip-confirmation",
+            action="store_true",
+            dest="skip_confirmation",
+            help="Skip user confirmation before executing.",
         )
 
     def _add_crashed_only(self) -> None:
@@ -199,7 +208,7 @@ class OptionParser:
     def _add_results_path(self) -> None:
         default_value = self.liftoff_config.get("results_path")
         if default_value is None:
-            default_value = "./results"
+            default_value = os.path.join(".", "results")
         default_value = str(default_value)
         self.arg_parser.add_argument(
             "--results-path",

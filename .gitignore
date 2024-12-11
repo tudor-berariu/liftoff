@@ -59,6 +59,7 @@ nosetests.xml
 coverage.xml
 *.cover
 .hypothesis/
+tmp/
 
 # Translations
 *.mo
@@ -113,3 +114,6 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# Development scripts/nbs
+develop.ipynb

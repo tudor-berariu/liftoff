@@ -2,6 +2,7 @@
 """
 
 import os.path
+from pathlib import Path
 import yaml
 from .common.liftopt import LO
 from .common.options_parser import OptionParser
@@ -27,6 +28,7 @@ def parse_opts():
     opts = LO.from_dict(config_data)
     if not hasattr(opts, "out_dir"):
         raise RuntimeError("No out_dir in config file.")
-    if not os.path.isdir(opts.out_dir):  # pylint: disable=no-member
-        raise RuntimeError("Out dir does not exist.")
+    out_dir_path = Path(opts.out_dir)
+    if not out_dir_path.is_dir():  # pylint: disable=no-member
+        raise RuntimeError(f"Out {opts.out_dir} dir does not exist.")
     return opts
