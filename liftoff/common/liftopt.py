@@ -175,3 +175,73 @@ class LO(Namespace):
 
     def __str__(self):
         return LO._to_str(self)
+
+    # handy platform information
+    @staticmethod
+    def _get_cpu_name():
+        import os
+        import platform
+        import re
+        import subprocess
+
+        if platform.system() == "Windows":
+            return platform.processor()
+        elif platform.system() == "Darwin":
+            os.environ["PATH"] = os.environ["PATH"] + os.pathsep + "/usr/sbin"
+            command = "sysctl -n machdep.cpu.brand_string"
+            return subprocess.check_output(command).strip()
+        elif platform.system() == "Linux":
+            command = "cat /proc/cpuinfo"
+            all_info = subprocess.check_output(command, shell=True).decode().strip()
+            for line in all_info.split("\n"):
+                if "model name" in line:
+                    return re.sub(".*model name.*:", "", line, 1)
+        return ""
+
+    @staticmethod
+    def _get_cpu_info():
+        keys = (
+            "brand_raw",
+            "count",
+            "hz_advertised_friendly",
+            "hz_actual_friendly",
+            "flags",
+        )
+        try:
+            import cpuinfo
+
+            cpu = {k: v for k, v in cpuinfo.get_cpu_info().items() if k in keys}
+        except ModuleNotFoundError:
+            cpu = "install `cpuinfo` to use this feature"
+
+        return cpu
+
+    @staticmethod
+    def _get_gpu_name():
+        try:
+            import gpustat
+            import pynvml
+
+            gpu = gpustat.new_query()[0].entry["name"]
+        except ModuleNotFoundError:
+            gpu = "install `gpustat` to use this feature"
+        except pynvml.NVMLError:
+            gpu = "`gpustat` can't find gpu"
+
+        return gpu
+
+    def platform(self) -> "LO":
+        import os
+        import socket
+
+        lo = LO(
+            host=socket.gethostname(),
+            cpu=LO._get_cpu_name(),
+            gpu=LO._get_gpu_name(),
+            cpuinfo_=LO._get_cpu_info(),
+        )
+        if ont := os.getenv("OMP_NUM_THREADS"):
+            setattr(lo, "omp_num_threads", ont)
+
+        setattr(self, "platform", lo)
+        return self

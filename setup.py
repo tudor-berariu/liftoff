@@ -1,12 +1,11 @@
-""" This is the install script. Be careful to update the version from time to
-    time and to add any additional entry points as you develop them. Also,
-    please keep the requirements list up to date.
+"""This is the install script. Be careful to update the version from time to
+time and to add any additional entry points as you develop them. Also,
+please keep the requirements list up to date.
 """
 
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
-
-VERSION = "0.3.3"  # single source of truth
+VERSION = "0.4.3"  # single source of truth
 print("-- Installing liftoff " + VERSION)
 with open("./liftoff/version.py", "w") as f:
     f.write("__version__ = '{}'\n".format(VERSION))
