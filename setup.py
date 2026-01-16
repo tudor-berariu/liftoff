@@ -5,7 +5,7 @@ please keep the requirements list up to date.
 
 from setuptools import find_packages, setup
 
-VERSION = "0.4.3"  # single source of truth
+VERSION = "0.4.4"  # single source of truth
 print("-- Installing liftoff " + VERSION)
 with open("./liftoff/version.py", "w") as f:
     f.write("__version__ = '{}'\n".format(VERSION))

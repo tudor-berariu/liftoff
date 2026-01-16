@@ -477,7 +477,8 @@ def prepare_experiment(opts):
 
             write_files = True
             if os.path.exists(lock_path) or os.path.exists(end_path):
-                print(clr(f"{run_path:s} is locked", "red"))
+                if opts.verbose and opts.verbose > 0:
+                    print(clr(f"{run_path:s} is locked", "red"))
                 write_files = False
             elif not opts.overwrite and os.path.exists(cfg_path):
                 write_files = False
