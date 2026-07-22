@@ -5,7 +5,6 @@ import os.path
 import sys
 import time
 from argparse import Namespace
-from collections import OrderedDict
 
 import numpy as np
 from tabulate import tabulate
@@ -124,16 +123,23 @@ def experiment_status(experiment_path):
         progress = 0
         left_wall_time = datetime.timedelta(days=100)
 
-    info = OrderedDict({})
-    info["Experiment"] = os.path.basename(experiment_path)
-    info["Total"] = f"{ntotal:d}"
-    info["Locked"] = f"{nlocked:d}"
-    info["Done"] = clr(f"{nended:d}", "green")
-    info["Dead"] = clr(f"{ncrashed:d}", "red")
-    if nlost > 0:
-        info["Lost"] = clr(f"{nlost:d}", "white", "on_magenta", attrs=["bold"])
-    info["Progress"] = clr(f"{progress:.3f}%", attrs=["bold"])
-    info["ETL"] = str(left_wall_time)
+    nrunning = nstarted - nended
+
+    info = {
+        "Experiment": os.path.basename(experiment_path),
+        "Running": f"{nrunning:d}",
+        "Done": clr(f"{nended:d}", "green"),
+        "Dead": clr(f"{ncrashed:d}", "red"),
+        **({"Lock": f"{nlocked:d}"} if nrunning != nlocked else {}),
+        **(
+            {"Lost": clr(f"{nlost:d}", "white", "on_magenta", attrs=["bold"])}
+            if nlost > 0
+            else {}
+        ),
+        "Total": f"{ntotal:d}",
+        "Progress": clr(f"{progress:.3f}%", attrs=["bold"]),
+        "ETL": str(left_wall_time),
+    }
 
     return info
 
