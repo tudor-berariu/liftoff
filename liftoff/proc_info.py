@@ -1,5 +1,4 @@
-""" Here we implement liftoff-procs and liftoff-abort
-"""
+"""Here we implement liftoff-procs and liftoff-abort"""
 
 from argparse import Namespace
 import os.path
@@ -9,18 +8,17 @@ from .common.options_parser import OptionParser
 
 
 def parse_options() -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
-        "liftoff-status", ["experiment", "all", "timestamp_fmt", "results_path", "do"],
+        "liftoff-status",
+        ["experiment", "all", "timestamp_fmt", "results_path", "do"],
     )
     return opt_parser.parse_args()
 
 
 def get_running_liftoffs(experiment: str, results_path: str):
-    """ Get the running liftoff processes.
-    """
+    """Get the running liftoff processes."""
 
     cmd = (
         "COLUMNS=0 pgrep liftoff"
@@ -94,21 +92,19 @@ def get_running_liftoffs(experiment: str, results_path: str):
 
 
 def display_procs(running):
-    """ Display the running liftoff processes.
-    """
+    """Display the running liftoff processes."""
     for experiment_name, details in running.items():
         print(clr(experiment_name, attrs=["bold"]))
         for info in details:
             nrunning = clr(f"{len(info['procs']):d}", color="blue", attrs=["bold"])
             ppid = clr(f"{info['ppid']:5d}", color="red", attrs=["bold"])
-            print(f"   {ppid:s}" f" :: {info['session']:s}" f" :: {nrunning:s} running")
+            print(f"   {ppid:s} :: {info['session']:s} :: {nrunning:s} running")
             for pid, name in info["procs"]:
                 print(f"      - {pid:5d} :: {name:s}")
 
 
 def procs() -> None:
-    """ Entry point for liftoff-procs.
-    """
+    """Entry point for liftoff-procs."""
 
     opts = parse_options()
     display_procs(get_running_liftoffs(opts.experiment, opts.results_path))

@@ -1,13 +1,12 @@
-""" Here we define wrapper functions to be called when one invokes
-    console commands.
+"""Here we define wrapper functions to be called when one invokes
+console commands.
 """
 
 # pylint: disable=import-outside-toplevel
 
 
 def prepare():
-    """ liftoff-prepare
-    """
+    """liftoff-prepare"""
     from .common.local_info import hello
     from .prepare import prepare as _prepare
 
@@ -16,8 +15,7 @@ def prepare():
 
 
 def liftoff():
-    """ liftoff-prepare
-    """
+    """liftoff-prepare"""
     from .common.local_info import hello
     from .liftoff import launch as _liftoff
 
@@ -26,8 +24,7 @@ def liftoff():
 
 
 def clean():
-    """ liftoff-clean
-    """
+    """liftoff-clean"""
     from .common.local_info import hello
     from .sanitizer import clean as _clean
 
@@ -36,8 +33,7 @@ def clean():
 
 
 def abort():
-    """ liftoff-abort
-    """
+    """liftoff-abort"""
     from .common.local_info import hello
     from .abort import abort as _abort
 
@@ -46,8 +42,7 @@ def abort():
 
 
 def procs():
-    """ liftoff-procs
-    """
+    """liftoff-procs"""
     from .common.local_info import hello
     from .proc_info import procs as _procs
 
@@ -56,8 +51,7 @@ def procs():
 
 
 def status():
-    """ liftoff-status
-    """
+    """liftoff-status"""
     from .common.local_info import hello
     from .status import status as _status
 
@@ -66,8 +60,7 @@ def status():
 
 
 def lock():
-    """ liftoff-lock
-    """
+    """liftoff-lock"""
     from .common.local_info import hello
     from .locker import lock as _lock
 
@@ -76,8 +69,7 @@ def lock():
 
 
 def unlock():
-    """ liftoff-unlock
-    """
+    """liftoff-unlock"""
     from .common.local_info import hello
     from .locker import lock as _lock
 

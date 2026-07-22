@@ -1,5 +1,4 @@
-""" Liftoff...
-"""
+"""Liftoff..."""
 
 import os.path
 from importlib.metadata import version, PackageNotFoundError
@@ -14,15 +13,15 @@ except PackageNotFoundError:
 
 
 def parse_opts():
-    """ This should be called by all scripts prepared by liftoff.
+    """This should be called by all scripts prepared by liftoff.
 
-        python script.py results/something/cfg.yaml
+    python script.py results/something/cfg.yaml
 
-        in your script.py
+    in your script.py
 
-          if __name__ == "__main__":
-              from liftoff import parse_opts()
-              main(parse_opts())
+      if __name__ == "__main__":
+          from liftoff import parse_opts()
+          main(parse_opts())
     """
 
     opt_parser = OptionParser("liftoff", ["config_path", "session_id"])

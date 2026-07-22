@@ -17,6 +17,11 @@ dependencies = [
     "pyperclip>=1.11.0",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.15.22",
+]
+
 [project.urls]
 Homepage = "https://github.com/tudor-berariu/liftoff"
 
@@ -37,24 +42,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["liftoff"]
 
-[tool.black]
-line-length = 88
-target-version = ['py36', 'py37', 'py38']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | blib2to3
-  | tests/data
-  | profiling
-)/
-'''
+[tool.ruff.lint]
+# pycodestyle, Pyflakes, pyupgrade, flake8-bugbear, flake8-simplify, isort,
+select = [ "E", "F", "UP", "B", "SIM", "I" ]
+ignore = [
+  "UP032",  # use f-string instead of `format` call
+]

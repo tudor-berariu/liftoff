@@ -1,23 +1,23 @@
-""" Here we implement the script that prepares an experiment to be run with
-    liftoff.
+"""Here we implement the script that prepares an experiment to be run with
+liftoff.
 
-    There are two intended use cases for this script:
+There are two intended use cases for this script:
 
-    1) For experiments defined by two files 'default.yaml' and 'config.yaml':
+1) For experiments defined by two files 'default.yaml' and 'config.yaml':
 
-        liftoff <config-dir>
+    liftoff <config-dir>
 
-    2) For experiments defined by a single file you want to run multiple times:
+2) For experiments defined by a single file you want to run multiple times:
 
-        liftoff <config-file>
+    liftoff <config-file>
 
-    Both command support the following command line arguments:
-        --name <new-name>
-        --runs-no <runs-nu>
-        --timestamp-fmt <timestamp-fmt>
-        --experiments-dir <experiments-dir>
-        --append-to <experiment-full-name>
-        --dry-run
+Both command support the following command line arguments:
+    --name <new-name>
+    --runs-no <runs-nu>
+    --timestamp-fmt <timestamp-fmt>
+    --experiments-dir <experiments-dir>
+    --append-to <experiment-full-name>
+    --dry-run
 """
 
 from argparse import Namespace
@@ -42,14 +42,12 @@ KNOWN_CONSTRAINTS = ["->", "<=>", "v", "!!"]
 
 
 def safe_file_name(title: str):
-    """ Replaces all symbols except those in VALID_CHARS with '_'.
-    """
+    """Replaces all symbols except those in VALID_CHARS with '_'."""
     return "".join(map(lambda c: c if c in VALID_CHARS else "_", title))
 
 
 def parse_options(args: List[str] = None, strict: bool = True) -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
         "liftoff-prepare",
@@ -71,8 +69,7 @@ def parse_options(args: List[str] = None, strict: bool = True) -> Namespace:
 
 
 def idxs_of_duplicates(lst):
-    """ Returns the indices of duplicate values.
-    """
+    """Returns the indices of duplicate values."""
     idxs_of = dict({})
     dup_idxs = []
     for idx, value in enumerate(lst):
@@ -84,8 +81,7 @@ def idxs_of_duplicates(lst):
 
 
 def var_names(variables):
-    """ Computes all non-ambiguous names a variable might take.
-    """
+    """Computes all non-ambiguous names a variable might take."""
     name_to_var = dict({})
     names = []
     lengths = [1 for _ in variables]
@@ -106,8 +102,7 @@ def var_names(variables):
 
 
 def check(values, constraints):
-    """ Checks the given assignment against given constraints.
-    """
+    """Checks the given assignment against given constraints."""
     for idx0, idx1, restrictions in constraints:
         should_del0, should_del1 = False, False
         for rtype, pairs in restrictions.items():
@@ -151,8 +146,7 @@ def check(values, constraints):
 
 
 def generate_combinations(cfg, _opts):
-    """ This is actually the function we wrote the whole script for.
-    """
+    """This is actually the function we wrote the whole script for."""
 
     if "liftoff" in cfg:
         constraints = cfg["liftoff"]
@@ -177,8 +171,8 @@ def generate_combinations(cfg, _opts):
                 queue.append((value, parent + [name]))
         else:
             raise ValueError(
-                f"\n\tEncountered `{node}` in configuration of `{'.'.join(parent)}`." + 
-                "\n\tRemove the field from `config.yaml` or provide a list of values."
+                f"\n\tEncountered `{node}` in configuration of `{'.'.join(parent)}`."
+                + "\n\tRemove the field from `config.yaml` or provide a list of values."
             )
 
     all_names, name_to_var = var_names(variables)
@@ -250,25 +244,19 @@ def generate_combinations(cfg, _opts):
 
     print(clr("\nConstraints:", attrs=["bold"]))
     for idx0, idx1, restrictions in constraints:
-
         name0, name1 = all_names[idx0][0], all_names[idx1][0]
         for rtype, values in restrictions.items():
             if rtype in ["->", "<=>", "v"]:
                 print("\t", end="")
                 print(
                     " & ".join(
-                        [
-                            f"{name0}={v0} {rtype} {name1}={v1}"
-                            for v0, v1 in values
-                        ]
+                        [f"{name0}={v0} {rtype} {name1}={v1}" for v0, v1 in values]
                     )
                 )
             elif rtype == "!!":
                 print("\t", end="")
                 print(
-                    " & ".join(
-                        [f"!({name0}={v0} & {name1}={v1})" for v0, v1 in values]
-                    )
+                    " & ".join([f"!({name0}={v0} & {name1}={v1})" for v0, v1 in values])
                 )
     for values in itertools.product(*domains):
         if not constraints or check(values, constraints):
@@ -284,11 +272,12 @@ def generate_combinations(cfg, _opts):
 
             yield (cfg, "; ".join(title))
 
-def update_config(cfg, args):
-    """ Here we assume we have a list of raw updates to be made to cfg.
-        e.g. ["model.hidden_units=32", "model.nonlinearity=relu", "model.droput=True"]
 
-        The function does not return some new configuration, but changes cfg in place.
+def update_config(cfg, args):
+    """Here we assume we have a list of raw updates to be made to cfg.
+    e.g. ["model.hidden_units=32", "model.nonlinearity=relu", "model.droput=True"]
+
+    The function does not return some new configuration, but changes cfg in place.
     """
     assert isinstance(args, list)
     assert all(len(arg.split("=")) == 2 for arg in args)
@@ -311,9 +300,9 @@ def update_config(cfg, args):
             print(exception)
             crt_cfg[keys[-1]] = value
 
+
 def prepare_single_subexperiment(opts: Namespace):
-    """ Here we add a single sub-experiment to an experiment.
-    """
+    """Here we add a single sub-experiment to an experiment."""
     with open(opts.config_path) as handler:
         config_data = yaml.load(handler, Loader=yaml.SafeLoader)
 
@@ -328,8 +317,8 @@ def prepare_single_subexperiment(opts: Namespace):
 
 
 def prepare_multiple_subexperiments(opts):
-    """ Here we assume there are either two files: config.yaml and default.yaml
-        or a bunch of files that will be added as single experiments.
+    """Here we assume there are either two files: config.yaml and default.yaml
+    or a bunch of files that will be added as single experiments.
     """
 
     default_path = os.path.join(opts.config_path, "default.yaml")
@@ -348,8 +337,7 @@ def prepare_multiple_subexperiments(opts):
 
 
 def prepare_experiment(opts):
-    """ This function does all the work.
-    """
+    """This function does all the work."""
     total_se, new_se, existing_se = 0, 0, 0
     total_runs, new_runs, existing_runs = 0, 0, 0
     written_runs = 0
@@ -417,14 +405,13 @@ def prepare_experiment(opts):
 
         print(f"New experiments will start from index {start_idx:d}.")
 
-    for (full_cfg, title, exp_cfg) in new_cfgs:
+    for full_cfg, title, exp_cfg in new_cfgs:
         clean_dict(full_cfg)
         total_se += 1
         if opts.verbose and opts.verbose > 0:
             print(f"Adding sub-experiment: {clr(title, attrs=['bold'])}.")
         cfg_hash = hashstr(uniqstr(full_cfg))
         if cfg_hash in existing:
-
             if opts.verbose and opts.verbose > 0:
                 print(f"Sub-xperiment {title} already", clr("exists", "green"))
 
@@ -492,8 +479,9 @@ def prepare_experiment(opts):
                 run_cfg["cfg_id"] = crt_cfg_id
                 run_cfg["title"] = title
                 dir_name = os.path.basename(opts.experiment_path.rstrip("/"))
-                run_cfg["full_title"] = f"{dir_name}_{title}" \
-                    if title not in dir_name else dir_name
+                run_cfg["full_title"] = (
+                    f"{dir_name}_{title}" if title not in dir_name else dir_name
+                )
 
                 if exp_cfg:
                     run_cfg["experiment_arguments"] = exp_cfg
@@ -547,7 +535,6 @@ def prepare_experiment(opts):
 
 
 def prepare(strict: bool = True) -> None:
-    """ Main function.
-    """
+    """Main function."""
     opts = parse_options(strict=strict)
     prepare_experiment(opts)

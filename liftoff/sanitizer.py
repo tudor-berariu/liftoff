@@ -1,5 +1,5 @@
-""" Here we clean a running process from trailing lock files,
-    crash files, etc.
+"""Here we clean a running process from trailing lock files,
+crash files, etc.
 """
 
 from argparse import Namespace
@@ -14,8 +14,7 @@ from .common import LIFTOFF_FILES
 
 
 def parse_options(strict: bool = True) -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
         "liftoff-clean",
@@ -34,7 +33,7 @@ def parse_options(strict: bool = True) -> Namespace:
 
 
 def find_experiment_products(run_path):
-    """ Find files that might be produced by an experiment, including but not
+    """Find files that might be produced by an experiment, including but not
     limited to logs, tensorboard events, models, pickle binaries.
     """
     experiment_products = []
@@ -46,7 +45,7 @@ def find_experiment_products(run_path):
 
 
 def maybe_remove_all(opts, run_path, prefix, info, lines):
-    """ Simulates, removes files provided by `find_experiment_products` and
+    """Simulates, removes files provided by `find_experiment_products` and
     updates info.
     """
     product_paths = find_experiment_products(run_path)
@@ -62,8 +61,7 @@ def maybe_remove_all(opts, run_path, prefix, info, lines):
 
 
 def clean_run(run_path, info, prefix, opts):
-    """ Here we clean a run file.
-    """
+    """Here we clean a run file."""
     lock_path = os.path.join(run_path, ".__lock")
     crash_path = os.path.join(run_path, ".__crash")
     start_path = os.path.join(run_path, ".__start")
@@ -110,8 +108,7 @@ def clean_run(run_path, info, prefix, opts):
 
 
 def clean_experiment(opts):
-    """ Clean a specific argument
-    """
+    """Clean a specific argument"""
     info = defaultdict(int)
 
     experiment_path = opts.experiment_path
@@ -151,8 +148,7 @@ def clean_experiment(opts):
 
 
 def clean():
-    """ Main function for liftoff-clean.
-    """
+    """Main function for liftoff-clean."""
     opts = parse_options()
     if not is_experiment(opts.config_path):
         raise RuntimeError(f"{opts.config_path:s} is not a liftoff experiment")

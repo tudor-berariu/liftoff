@@ -1,5 +1,5 @@
-""" Here we define some info about liftoff that will be displayed
-    in the hello message.
+"""Here we define some info about liftoff that will be displayed
+in the hello message.
 """
 
 import os.path

@@ -1,5 +1,4 @@
-""" TODO: write doc
-"""
+"""TODO: write doc"""
 
 import os
 import os.path

@@ -1,5 +1,4 @@
-""" Here we implement liftoff-status
-"""
+"""Here we implement liftoff-status"""
 
 from argparse import Namespace
 from collections import OrderedDict
@@ -16,8 +15,7 @@ from .common.options_parser import OptionParser
 
 
 def parse_options() -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
         "liftoff-status", ["experiment", "all", "timestamp_fmt", "results_path"]
@@ -26,8 +24,7 @@ def parse_options() -> Namespace:
 
 
 def experiment_status(experiment_path):
-    """ Gets full info about about an experiment.
-    """
+    """Gets full info about about an experiment."""
     ntotal, nstarted, nended, ncrashed, nlocked, nlost = 0, 0, 0, 0, 0, 0
     durations = []
     live_durations = []
@@ -141,17 +138,18 @@ def experiment_status(experiment_path):
 
 
 def display_experiments(experiments_info: List[dict]):
-    """ Here we nicely display the experiments.
-    """
+    """Here we nicely display the experiments."""
     print(tabulate(experiments_info, headers="keys"))
 
 
 def status() -> None:
-    """ Entry point for liftoff-status.
-    """
+    """Entry point for liftoff-status."""
     opts = parse_options()
     experiment_paths = get_experiment_paths(  # pylint: disable=bad-continuation
-        opts.experiment, opts.results_path, opts.timestamp_fmt, latest=(not opts.all),
+        opts.experiment,
+        opts.results_path,
+        opts.timestamp_fmt,
+        latest=(not opts.all),
     )
     display_experiments(
         sorted(

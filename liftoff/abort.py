@@ -1,5 +1,4 @@
-""" Here we implement liftoff-abort.
-"""
+"""Here we implement liftoff-abort."""
 
 from argparse import Namespace
 import os
@@ -11,8 +10,7 @@ from .common.options_parser import OptionParser
 
 
 def parse_options() -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser("liftoff-abort", ["pid", "results_path"])
     return opt_parser.parse_args()
@@ -29,8 +27,8 @@ def ask_user():
 
 
 def running_children(session_id):
-    """ Gets running processes with a specific session-id.
-        TODO: check more details.
+    """Gets running processes with a specific session-id.
+    TODO: check more details.
     """
     escaped_sid = session_id.replace("-", r"\-")
     cmd = (
@@ -59,8 +57,7 @@ def running_children(session_id):
 
 
 def abort_experiment(ppid, results_path):
-    """ Here we search for running pids.
-    """
+    """Here we search for running pids."""
 
     cmd = f"COLUMNS=0 ps -o cmd= -f {ppid:d}"
     result = subprocess.run(
@@ -105,7 +102,9 @@ def abort_experiment(ppid, results_path):
     if not found:
         print("Couldn't find the process you want to kill.")
         print(
-            "Run", clr("liftoff-procs", attrs=["bold"]), "to see running liftoffs.",
+            "Run",
+            clr("liftoff-procs", attrs=["bold"]),
+            "to see running liftoffs.",
         )
         return
 
@@ -130,8 +129,7 @@ def abort_experiment(ppid, results_path):
 
 
 def abort():
-    """ Main function.
-    """
+    """Main function."""
 
     opts = parse_options()
     abort_experiment(opts.pid, opts.results_path)

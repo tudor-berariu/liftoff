@@ -1,5 +1,5 @@
-""" Here we lock some experiments.
-    Not a very useful feature in general.
+"""Here we lock some experiments.
+Not a very useful feature in general.
 """
 
 from argparse import Namespace
@@ -13,20 +13,18 @@ from .liftoff import lock_file
 
 
 def parse_options(strict: bool = True) -> Namespace:
-    """ Parse command line arguments and liftoff configuration.
-    """
+    """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(
         "liftoff-lock",
-        ["config_path", "runs", "filters", "do", "verbose", "timestamp_fmt"]
+        ["config_path", "runs", "filters", "do", "verbose", "timestamp_fmt"],
     )
 
     return opt_parser.parse_args(strict=strict)
 
 
 def unlock_run(run_path, info, prefix, opts):
-    """ Unlock a run if possible.
-    """
+    """Unlock a run if possible."""
     lines = []
     existing_files = os.listdir(run_path)
 
@@ -53,8 +51,7 @@ def unlock_run(run_path, info, prefix, opts):
 
 
 def lock_run(run_path, info, prefix, opts):
-    """ Lock a run if possible.
-    """
+    """Lock a run if possible."""
     lines = []
     existing_files = os.listdir(run_path)
 
@@ -86,9 +83,9 @@ def lock_run(run_path, info, prefix, opts):
 
 
 def change_experiment_lock_status(opts, unlock=False):
-    """ Lock or Unlock experiments given the RUNS and FILTERS provided in opts.
-        FILTERS allows for selecting experiments based on their configuration.
-        For example experiments containing the configuration `a.b=c` can be targeted.
+    """Lock or Unlock experiments given the RUNS and FILTERS provided in opts.
+    FILTERS allows for selecting experiments based on their configuration.
+    For example experiments containing the configuration `a.b=c` can be targeted.
     """
     info = defaultdict(int)
 
@@ -140,8 +137,7 @@ def change_experiment_lock_status(opts, unlock=False):
 
 
 def lock(unlock=False):
-    """ Main function for liftoff-lock.
-    """
+    """Main function for liftoff-lock."""
     opts = parse_options()
     if not is_experiment(opts.config_path):
         raise RuntimeError(f"{opts.config_path:s} is not a liftoff experiment")

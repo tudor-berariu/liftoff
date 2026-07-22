@@ -1,5 +1,5 @@
-""" Here we define some functions that might be useful in more than one
-    script.
+"""Here we define some functions that might be useful in more than one
+script.
 """
 
 from datetime import datetime
@@ -8,8 +8,7 @@ import yaml
 
 
 def is_yaml(path: str) -> bool:
-    """ Checks if path points to a config file.
-    """
+    """Checks if path points to a config file."""
     if not os.path.isfile(path):
         return False
 
@@ -23,8 +22,8 @@ def is_yaml(path: str) -> bool:
 
 
 def is_experiment(path: str) -> bool:
-    """ Checks if given path contains a liftoff experiment (i.e. it is a folder
-        that has a .__experiment file).
+    """Checks if given path contains a liftoff experiment (i.e. it is a folder
+    that has a .__experiment file).
     """
     if not os.path.isdir(path):
         return False
@@ -36,8 +35,8 @@ def is_experiment(path: str) -> bool:
 def get_experiment_paths(  # pylint: disable=bad-continuation
     experiment: str, results_path: str, timestamp_fmt: str, latest: bool = False
 ) -> str:
-    """ Returns the latest experiment with the given name and the given
-        timestamp_fmt.
+    """Returns the latest experiment with the given name and the given
+    timestamp_fmt.
     """
     if experiment is None:
         experiment = ""

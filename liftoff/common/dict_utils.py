@@ -1,5 +1,4 @@
-""" Here we provide some useful functions to work with dictionaries.
-"""
+"""Here we provide some useful functions to work with dictionaries."""
 
 from argparse import Namespace
 import hashlib
@@ -7,12 +6,12 @@ import operator
 
 
 def uniqstr(obj):
-    """ This function attempts to get unique string representations of objects
-        containing dictionaries that are inherently orderless.
+    """This function attempts to get unique string representations of objects
+    containing dictionaries that are inherently orderless.
 
-        It's purpose is almost impossible, so this represents just a lame
-        attempt to get that representation. Nonetheless it should be enough for
-        our case.
+    It's purpose is almost impossible, so this represents just a lame
+    attempt to get that representation. Nonetheless it should be enough for
+    our case.
     """
 
     if isinstance(obj, dict):
@@ -25,15 +24,15 @@ def uniqstr(obj):
 
 
 def hashstr(string):
-    """ I use some hash function, the first I laid my eyes on, to get a shorter
-        string from the given one.
+    """I use some hash function, the first I laid my eyes on, to get a shorter
+    string from the given one.
     """
     return hashlib.sha224(string.encode()).hexdigest()
 
 
 def deep_update_dict(dct1, dct2, delete_entries=False):
-    """ Updates the value from a given recursive dictionary with those from a
-        second one.
+    """Updates the value from a given recursive dictionary with those from a
+    second one.
     """
 
     for key, value in dct2.items():
@@ -53,8 +52,7 @@ def deep_update_dict(dct1, dct2, delete_entries=False):
 
 
 def clean_dict(dct):
-    """ [deeply] Removes entries marked with delete from the dictionary.
-    """
+    """[deeply] Removes entries marked with delete from the dictionary."""
     if isinstance(dct, dict):
         to_del = []
         for key, value in dct.items():

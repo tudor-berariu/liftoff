@@ -1,8 +1,8 @@
-""" In order to reuse and have a consistent set of arguments we use the
-    functions in this file to build argument parsers for all scripts.
+"""In order to reuse and have a consistent set of arguments we use the
+functions in this file to build argument parsers for all scripts.
 
-    TODO: change to class methods to common methods if there is no need to call
-        those functions outside an instance of OptionParser.
+TODO: change to class methods to common methods if there is no need to call
+    those functions outside an instance of OptionParser.
 """
 
 from argparse import ArgumentParser, Namespace
@@ -13,8 +13,8 @@ from .liftoff_config import LiftoffConfig
 
 
 class OptionParser:
-    """ This class facilitates combining command line arguments and liftoff
-        settings.
+    """This class facilitates combining command line arguments and liftoff
+    settings.
     """
 
     def __init__(self, name, arguments: List[str]) -> None:
@@ -26,8 +26,8 @@ class OptionParser:
             getattr(self, f"_add_{arg:s}")()
 
     def parse_args(self, args: List[str] = None, strict: bool = True) -> Namespace:
-        """ Parses command-line arguments and completes options with values
-            from liftoff configuration files.
+        """Parses command-line arguments and completes options with values
+        from liftoff configuration files.
         """
 
         if strict:
