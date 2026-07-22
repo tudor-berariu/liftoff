@@ -22,10 +22,13 @@ Both command support the following command line arguments:
 
 import glob
 import itertools
+import os
 import os.path
 import re
 import string
+import sys
 from argparse import Namespace
+from collections import defaultdict
 from copy import copy, deepcopy
 from datetime import datetime
 
@@ -61,6 +64,7 @@ def parse_options(args: list[str] = None, strict: bool = True) -> Namespace:
             "overwrite",
             "verbose",
             "copy_to_clipboard",
+            "sync",
         ],
     )
 
@@ -353,6 +357,8 @@ def prepare_experiment(opts):
             print("Option --name {opts.name} will be ignored.")
         experiment_path = opts.append_to
     else:
+        if opts.sync:
+            raise RuntimeError("--sync requires --append-to")
         if opts.name is None:
             name = os.path.basename(os.path.normpath(opts.config_path))
             if name.endswith(".yaml"):
@@ -380,6 +386,7 @@ def prepare_experiment(opts):
 
     start_idx = 0
     existing = dict({})
+    current_cfg_hashes = set()
 
     if opts.do and not opts.append_to:
         os.makedirs(experiment_path)
@@ -410,6 +417,7 @@ def prepare_experiment(opts):
         if opts.verbose and opts.verbose > 0:
             print(f"Adding sub-experiment: {clr(title, attrs=['bold'])}.")
         cfg_hash = hashstr(uniqstr(full_cfg))
+        current_cfg_hashes.add(cfg_hash)
         if cfg_hash in existing:
             if opts.verbose and opts.verbose > 0:
                 print(f"Sub-xperiment {title} already", clr("exists", "green"))
@@ -490,6 +498,70 @@ def prepare_experiment(opts):
 
                 open(leaf_path, "a").close()
 
+    stale_subexperiments = 0
+    locked_runs = 0
+    unlocked_runs = 0
+
+    if opts.sync and opts.append_to:
+        from .locker import lock_run, unlock_run
+        lock_info = defaultdict(int)
+        unlock_info = defaultdict(int)
+        timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
+        prefix = f"[{timestamp:s}][{opts.session_id}]"
+
+        for fle in os.scandir(opts.experiment_path):
+            if not fle.is_dir():
+                continue
+            if not fle.name.split("_")[0].isdigit():
+                continue
+            try:
+                with open(os.path.join(fle.path, ".__cfg_hash")) as hndlr:
+                    cfg_hash = hndlr.readline().strip()
+            except FileNotFoundError:
+                if opts.verbose and opts.verbose > 0:
+                    sys.stderr.write(
+                        f"Skipping {fle.name}: missing .__cfg_hash\n"
+                    )
+                continue
+            if cfg_hash not in current_cfg_hashes:
+                stale_subexperiments += 1
+                for run_fle in os.scandir(fle.path):
+                    if not run_fle.is_dir() or not run_fle.name.isdigit():
+                        continue
+                    existing_files = os.listdir(run_fle.path)
+                    if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
+                        if opts.verbose and opts.verbose > 0:
+                            sys.stderr.write(
+                                f"Skipping {run_fle.path}: missing cfg.yaml/.__leaf\n"
+                            )
+                        continue
+                    if any(
+                        marker in existing_files
+                        for marker in (".__start", ".__lock", ".__end", ".__crash")
+                    ):
+                        continue
+                    lock_run(run_fle.path, lock_info, prefix, opts)
+            elif cfg_hash in current_cfg_hashes:
+                for run_fle in os.scandir(fle.path):
+                    if not run_fle.is_dir() or not run_fle.name.isdigit():
+                        continue
+                    existing_files = os.listdir(run_fle.path)
+                    if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
+                        if opts.verbose and opts.verbose > 0:
+                            sys.stderr.write(
+                                f"Skipping {run_fle.path}: missing cfg.yaml/.__leaf\n"
+                            )
+                        continue
+                    if any(
+                        marker in existing_files
+                        for marker in (".__start", ".__end", ".__crash")
+                    ):
+                        continue
+                    if ".__seal" not in existing_files:
+                        continue
+                    unlocked_runs += 1
+                    unlock_run(run_fle.path, unlock_info, prefix, opts)
+        locked_runs = lock_info["nlocks"]
     print(clr("\nSummary:", attrs=["bold"]))
     print(
         "\tSub-experiments:",
@@ -515,6 +587,18 @@ def prepare_experiment(opts):
         "Written:",
         clr(f"{written_runs:d}", attrs=["bold"]),
     )
+
+    if opts.sync and opts.append_to:
+        sim_label = "(simulation)" if not opts.do else ""
+        print(
+            "\tSync:",
+            clr(f"{stale_subexperiments:d}", attrs=["bold"]),
+            "stale sub-experiments |",
+            clr(f"{locked_runs:d}", attrs=["bold"]),
+            f"runs locked {sim_label} |",
+            clr(f"{unlocked_runs:d}", attrs=["bold"]),
+            f"runs unlocked {sim_label}",
+        )
 
     if not opts.do:
         print(

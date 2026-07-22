@@ -254,6 +254,13 @@ class OptionParser:
             help="Clean *all* the files an experiment run produced.",
         )
 
+    def _add_sync(self) -> None:
+        self.arg_parser.add_argument(
+            "--sync",
+            action="store_true",
+            dest="sync",
+            help="Lock stale runs when used with --append-to.",
+        )
     def _add_timestamp_fmt(self) -> None:
         default_value = self.liftoff_config.get("timestamp_fmt")
         if default_value is None:
