@@ -5,9 +5,8 @@ TODO: change to class methods to common methods if there is no need to call
     those functions outside an instance of OptionParser.
 """
 
-from argparse import ArgumentParser, Namespace
-from typing import List
 import uuid
+from argparse import ArgumentParser, Namespace
 
 from .liftoff_config import LiftoffConfig
 
@@ -17,7 +16,7 @@ class OptionParser:
     settings.
     """
 
-    def __init__(self, name, arguments: List[str]) -> None:
+    def __init__(self, name, arguments: list[str]) -> None:
         self.liftoff_config = LiftoffConfig()
         self.arg_parser = ArgumentParser(name)
         self.arguments = [str(arg) for arg in arguments]
@@ -25,7 +24,7 @@ class OptionParser:
         for arg in self.arguments:
             getattr(self, f"_add_{arg:s}")()
 
-    def parse_args(self, args: List[str] = None, strict: bool = True) -> Namespace:
+    def parse_args(self, args: list[str] = None, strict: bool = True) -> Namespace:
         """Parses command-line arguments and completes options with values
         from liftoff configuration files.
         """

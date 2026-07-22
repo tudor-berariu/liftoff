@@ -34,8 +34,8 @@ def clean():
 
 def abort():
     """liftoff-abort"""
-    from .common.local_info import hello
     from .abort import abort as _abort
+    from .common.local_info import hello
 
     hello()
     _abort()

@@ -1,8 +1,8 @@
 """Here we provide some useful functions to work with dictionaries."""
 
-from argparse import Namespace
 import hashlib
 import operator
+from argparse import Namespace
 
 
 def uniqstr(obj):

@@ -2,8 +2,9 @@
 script.
 """
 
-from datetime import datetime
 import os.path
+from datetime import datetime
+
 import yaml
 
 

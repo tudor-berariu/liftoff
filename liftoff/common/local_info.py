@@ -3,6 +3,7 @@ in the hello message.
 """
 
 import os.path
+
 import git
 from termcolor import colored as clr
 

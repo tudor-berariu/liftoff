@@ -2,12 +2,14 @@
 Not a very useful feature in general.
 """
 
-from argparse import Namespace
-from datetime import datetime
-from collections import defaultdict
 import os
+from argparse import Namespace
+from collections import defaultdict
+from datetime import datetime
+
 from termcolor import colored as clr
-from .common.experiment_info import is_experiment, experiment_matches
+
+from .common.experiment_info import experiment_matches, is_experiment
 from .common.options_parser import OptionParser
 from .liftoff import lock_file
 

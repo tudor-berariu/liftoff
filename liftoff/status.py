@@ -1,15 +1,16 @@
 """Here we implement liftoff-status"""
 
-from argparse import Namespace
-from collections import OrderedDict
 import datetime
 import os.path
 import sys
 import time
-from typing import List
+from argparse import Namespace
+from collections import OrderedDict
+
+import numpy as np
 from tabulate import tabulate
 from termcolor import colored as clr
-import numpy as np
+
 from .common.experiment_info import get_experiment_paths
 from .common.options_parser import OptionParser
 
@@ -137,7 +138,7 @@ def experiment_status(experiment_path):
     return info
 
 
-def display_experiments(experiments_info: List[dict]):
+def display_experiments(experiments_info: list[dict]):
     """Here we nicely display the experiments."""
     print(tabulate(experiments_info, headers="keys"))
 

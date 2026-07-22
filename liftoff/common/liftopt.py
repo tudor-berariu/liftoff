@@ -241,7 +241,7 @@ class LO(Namespace):
             cpuinfo_=LO._get_cpu_info(),
         )
         if ont := os.getenv("OMP_NUM_THREADS"):
-            setattr(lo, "omp_num_threads", ont)
+            lo.omp_num_threads = ont
 
-        setattr(self, "platform", lo)
+        self.platform = lo
         return self

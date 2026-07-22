@@ -2,15 +2,17 @@
 crash files, etc.
 """
 
-from argparse import Namespace
-from datetime import datetime
-from collections import defaultdict
 import os.path
 import shutil
+from argparse import Namespace
+from collections import defaultdict
+from datetime import datetime
+
 from termcolor import colored as clr
+
+from .common import LIFTOFF_FILES
 from .common.experiment_info import is_experiment
 from .common.options_parser import OptionParser
-from .common import LIFTOFF_FILES
 
 
 def parse_options(strict: bool = True) -> Namespace:

@@ -8,16 +8,16 @@ import sys
 import time
 import traceback
 from argparse import Namespace
+from collections.abc import Callable
 from functools import partial
 from importlib import import_module
 from time import perf_counter
-from typing import Callable, List
 
 import yaml
 from termcolor import colored as clr
 
+from .common.experiment_info import experiment_matches, is_experiment, is_yaml
 from .common.liftopt import LO
-from .common.experiment_info import is_experiment, is_yaml, experiment_matches
 from .common.options_parser import OptionParser
 from .prepare import parse_options as prepare_parse_options
 from .prepare import prepare_experiment
@@ -44,7 +44,7 @@ class LiftoffResources:
             self.gpu_running_procs = {g: 0 for g in self.gpus}
         self.running_procs = 0
 
-    def process_commands(self, commands: List[str]):
+    def process_commands(self, commands: list[str]):
         """Here we process some commands we got from god knows where that
         might change the way we want to allocate resources.
         """

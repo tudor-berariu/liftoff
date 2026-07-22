@@ -1,8 +1,10 @@
 """Liftoff..."""
 
 import os.path
-from importlib.metadata import version, PackageNotFoundError
+from importlib.metadata import PackageNotFoundError, version
+
 import yaml
+
 from .common.liftopt import LO
 from .common.options_parser import OptionParser
 

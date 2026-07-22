@@ -20,22 +20,21 @@ Both command support the following command line arguments:
     --dry-run
 """
 
-from argparse import Namespace
-from datetime import datetime
-from copy import copy, deepcopy
+import glob
 import itertools
 import os.path
 import re
 import string
-from typing import List
+from argparse import Namespace
+from copy import copy, deepcopy
+from datetime import datetime
+
 import pyperclip
-from termcolor import colored as clr
 import yaml
-import glob
+from termcolor import colored as clr
 
 from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
 from .common.options_parser import OptionParser
-
 
 VALID_CHARS = f"-_.(){string.ascii_letters:s}{string.digits:s}"
 KNOWN_CONSTRAINTS = ["->", "<=>", "v", "!!"]
@@ -46,7 +45,7 @@ def safe_file_name(title: str):
     return "".join(map(lambda c: c if c in VALID_CHARS else "_", title))
 
 
-def parse_options(args: List[str] = None, strict: bool = True) -> Namespace:
+def parse_options(args: list[str] = None, strict: bool = True) -> Namespace:
     """Parse command line arguments and liftoff configuration."""
 
     opt_parser = OptionParser(

@@ -1,8 +1,9 @@
 """Here we implement liftoff-abort."""
 
-from argparse import Namespace
 import os
 import subprocess
+from argparse import Namespace
+
 from termcolor import colored as clr
 
 from .common.experiment_info import is_experiment

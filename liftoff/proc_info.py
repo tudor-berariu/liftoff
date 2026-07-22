@@ -1,9 +1,11 @@
 """Here we implement liftoff-procs and liftoff-abort"""
 
-from argparse import Namespace
 import os.path
 import subprocess
+from argparse import Namespace
+
 from termcolor import colored as clr
+
 from .common.options_parser import OptionParser
 
 
