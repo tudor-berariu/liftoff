@@ -2,10 +2,15 @@
 """
 
 import os.path
+from importlib.metadata import version, PackageNotFoundError
 import yaml
 from .common.liftopt import LO
 from .common.options_parser import OptionParser
-from .version import __version__  # pylint: disable=import-error
+
+try:
+    __version__ = version("liftoff")
+except PackageNotFoundError:
+    __version__ = "unknown"
 
 
 def parse_opts():

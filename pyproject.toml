@@ -1,10 +1,41 @@
-# Liftoff configuration for Black so that line-length is consistent across
-# contributors.
+[project]
+name = "liftoff"
+version = "0.5.0"
+description = "Experiment launcher; AGI assistant"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [
+    { name = "Tudor Berariu", email = "tudor.berariu@gmail.com" },
+]
+dependencies = [
+    "numpy",
+    "gitpython",
+    "pyyaml",
+    "tabulate",
+    "termcolor",
+    "pyperclip>=1.11.0",
+]
 
-# NOTE: you have to use single-quoted strings in TOML for regular expressions.
-# It's the equivalent of r-strings in Python.  Multiline strings are treated as
-# verbose regular expressions by Black.  Use [ ] to denote a significant space
-# character.
+[project.urls]
+Homepage = "https://github.com/tudor-berariu/liftoff"
+
+[project.scripts]
+liftoff-prepare = "liftoff.cmd:prepare"
+liftoff = "liftoff.cmd:liftoff"
+liftoff-abort = "liftoff.cmd:abort"
+liftoff-procs = "liftoff.cmd:procs"
+liftoff-clean = "liftoff.cmd:clean"
+liftoff-status = "liftoff.cmd:status"
+liftoff-lock = "liftoff.cmd:lock"
+liftoff-unlock = "liftoff.cmd:unlock"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["liftoff"]
 
 [tool.black]
 line-length = 88
@@ -22,7 +53,6 @@ exclude = '''
   | buck-out
   | build
   | dist
-  # The following are specific to Black, you probably don't want those.
   | blib2to3
   | tests/data
   | profiling
