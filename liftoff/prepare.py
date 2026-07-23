@@ -28,7 +28,6 @@ import re
 import string
 import sys
 from argparse import Namespace
-from collections import defaultdict
 from copy import copy, deepcopy
 from datetime import datetime
 
@@ -38,9 +37,12 @@ from termcolor import colored as clr
 
 from .common.dict_utils import clean_dict, deep_update_dict, hashstr, uniqstr
 from .common.options_parser import OptionParser
+from .locker import lock_run, unlock_run
 
 VALID_CHARS = f"-_.(){string.ascii_letters:s}{string.digits:s}"
 KNOWN_CONSTRAINTS = ["->", "<=>", "v", "!!"]
+_RUN_MARKERS = frozenset({".__lock", ".__start", ".__end", ".__crash"})
+_STARTED_MARKERS = frozenset({".__start", ".__end", ".__crash"})
 
 
 def safe_file_name(title: str):
@@ -499,15 +501,15 @@ def prepare_experiment(opts):
                 open(leaf_path, "a").close()
 
     stale_subexperiments = 0
-    locked_runs = 0
-    unlocked_runs = 0
+    lock_counts: dict[str, int] = {}
+    unlock_counts: dict[str, int] = {}
 
     if opts.sync and opts.append_to:
-        from .locker import lock_run, unlock_run
-        lock_info = defaultdict(int)
-        unlock_info = defaultdict(int)
         timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
         prefix = f"[{timestamp:s}][{opts.session_id}]"
+
+        def _bump(counts: dict[str, int], status: str) -> None:
+            counts[status] = counts.get(status, 0) + 1
 
         for fle in os.scandir(opts.experiment_path):
             if not fle.is_dir():
@@ -519,49 +521,38 @@ def prepare_experiment(opts):
                     cfg_hash = hndlr.readline().strip()
             except FileNotFoundError:
                 if opts.verbose and opts.verbose > 0:
-                    sys.stderr.write(
-                        f"Skipping {fle.name}: missing .__cfg_hash\n"
-                    )
+                    sys.stderr.write(f"Skipping {fle.name}: missing .__cfg_hash\n")
                 continue
-            if cfg_hash not in current_cfg_hashes:
+
+            stale = cfg_hash not in current_cfg_hashes
+            if stale:
                 stale_subexperiments += 1
-                for run_fle in os.scandir(fle.path):
-                    if not run_fle.is_dir() or not run_fle.name.isdigit():
+
+            for run_fle in os.scandir(fle.path):
+                if not run_fle.is_dir() or not run_fle.name.isdigit():
+                    continue
+                existing_files = os.listdir(run_fle.path)
+                if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
+                    if opts.verbose and opts.verbose > 0:
+                        sys.stderr.write(
+                            f"Skipping {run_fle.path}: missing cfg.yaml/.__leaf\n"
+                        )
+                    continue
+
+                if stale:
+                    if any(marker in existing_files for marker in _RUN_MARKERS):
                         continue
-                    existing_files = os.listdir(run_fle.path)
-                    if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
-                        if opts.verbose and opts.verbose > 0:
-                            sys.stderr.write(
-                                f"Skipping {run_fle.path}: missing cfg.yaml/.__leaf\n"
-                            )
-                        continue
+                    status = lock_run(run_fle.path, prefix, opts)
+                    _bump(lock_counts, status)
+                else:
                     if any(
-                        marker in existing_files
-                        for marker in (".__start", ".__lock", ".__end", ".__crash")
+                        marker in existing_files for marker in _STARTED_MARKERS
                     ):
                         continue
-                    lock_run(run_fle.path, lock_info, prefix, opts)
-            elif cfg_hash in current_cfg_hashes:
-                for run_fle in os.scandir(fle.path):
-                    if not run_fle.is_dir() or not run_fle.name.isdigit():
-                        continue
-                    existing_files = os.listdir(run_fle.path)
-                    if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
-                        if opts.verbose and opts.verbose > 0:
-                            sys.stderr.write(
-                                f"Skipping {run_fle.path}: missing cfg.yaml/.__leaf\n"
-                            )
-                        continue
-                    if any(
-                        marker in existing_files
-                        for marker in (".__start", ".__end", ".__crash")
-                    ):
-                        continue
-                    if ".__seal" not in existing_files:
-                        continue
-                    unlocked_runs += 1
-                    unlock_run(run_fle.path, unlock_info, prefix, opts)
-        locked_runs = lock_info["nlocks"]
+                    status = unlock_run(run_fle.path, prefix, opts)
+                    _bump(unlock_counts, status)
+    locked_runs = lock_counts.get("locked", 0)
+    unlocked_runs = unlock_counts.get("unlocked", 0)
     print(clr("\nSummary:", attrs=["bold"]))
     print(
         "\tSub-experiments:",
@@ -599,6 +590,21 @@ def prepare_experiment(opts):
             clr(f"{unlocked_runs:d}", attrs=["bold"]),
             f"runs unlocked {sim_label}",
         )
+        if opts.verbose and opts.verbose > 0:
+            skipped_locked = lock_counts.get("already_started", 0)
+            strange = lock_counts.get("strange", 0) + unlock_counts.get(
+                "strange", 0
+            )
+            raced = lock_counts.get("raced", 0)
+            print(
+                "\tSync details:",
+                clr(f"{skipped_locked:d}", attrs=["bold"]),
+                "runs already started |",
+                clr(f"{strange:d}", attrs=["bold"]),
+                "strange folders |",
+                clr(f"{raced:d}", attrs=["bold"]),
+                "races lost",
+            )
 
     if not opts.do:
         print(

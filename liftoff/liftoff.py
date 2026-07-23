@@ -85,12 +85,14 @@ class LiftoffResources:
         return msg
 
 
+_LEAF_FILES = frozenset({"cfg.yaml", ".__leaf"})
+_RUN_MARKERS = frozenset({".__lock", ".__crash", ".__end", ".__start"})
+
+
 def some_run_path(experiment_path, filters=None):
     """So we have that experiment path and we ask for a single subexperiment
     we might run now.
     """
-    must_be = ["cfg.yaml", ".__leaf"]
-    must_not_be = [".__lock", ".__crash", ".__end", ".__start"]
     with os.scandir(experiment_path) as fit:
         for entry in fit:
             if not entry.name.startswith(".") and entry.is_dir():
@@ -103,12 +105,12 @@ def some_run_path(experiment_path, filters=None):
                             mandatory_files = []
                             with os.scandir(run_path) as fit3:
                                 for entry3 in fit3:
-                                    if entry3.name in must_not_be:
+                                    if entry3.name in _RUN_MARKERS:
                                         done_before = True
                                         break
-                                    if entry3.name in must_be:
+                                    if entry3.name in _LEAF_FILES:
                                         mandatory_files.append(entry3.name)
-                            if done_before or set(mandatory_files) != set(must_be):
+                            if done_before or set(mandatory_files) != _LEAF_FILES:
                                 continue
                             if filters and not experiment_matches(run_path, filters):
                                 print(f"Skipping {run_path:s} as it was filtered out.")

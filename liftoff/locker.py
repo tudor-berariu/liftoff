@@ -4,14 +4,14 @@ Not a very useful feature in general.
 
 import os
 from argparse import Namespace
-from collections import defaultdict
 from datetime import datetime
 
 from termcolor import colored as clr
 
 from .common.experiment_info import experiment_matches, is_experiment
 from .common.options_parser import OptionParser
-from .liftoff import lock_file
+
+_RUN_MARKERS = frozenset({".__lock", ".__start", ".__end", ".__crash"})
 
 
 def parse_options(strict: bool = True) -> Namespace:
@@ -25,22 +25,22 @@ def parse_options(strict: bool = True) -> Namespace:
     return opt_parser.parse_args(strict=strict)
 
 
-def unlock_run(run_path, info, prefix, opts):
-    """Unlock a run if possible."""
-    lines = []
+def unlock_run(run_path, prefix, opts) -> str:
+    """Unlock a run if possible.
+
+    Returns one of: "unlocked", "strange", "no_seal".
+    """
+    lines: list[str] = []
     existing_files = os.listdir(run_path)
 
     if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
-        info["nstrange"] += 1
-        return
+        return "strange"
 
     if ".__seal" not in existing_files:
-        return
+        return "no_seal"
 
-    if ".__lock" in existing_files:
-        info["nlocks"] += 1
-        if opts.do:
-            os.remove(os.path.join(run_path, ".__lock"))
+    if ".__lock" in existing_files and opts.do:
+        os.remove(os.path.join(run_path, ".__lock"))
 
     if opts.do:
         os.remove(os.path.join(run_path, ".__seal"))
@@ -51,37 +51,35 @@ def unlock_run(run_path, info, prefix, opts):
         with open(os.path.join(run_path, ".__journal"), "a") as j_hndlr:
             j_hndlr.writelines(lines)
 
+    return "unlocked"
 
-def lock_run(run_path, info, prefix, opts):
-    """Lock a run if possible."""
-    lines = []
+
+def lock_run(run_path, prefix, opts) -> str:
+    """Lock a run if possible.
+
+    Returns one of: "locked", "already_started", "strange", "raced".
+    """
+    from .liftoff import lock_file
+
     existing_files = os.listdir(run_path)
 
     if "cfg.yaml" not in existing_files or ".__leaf" not in existing_files:
-        info["nstrange"] += 1
-        return
+        return "strange"
 
-    for must_not_be in [".__start", ".__lock", ".__end", ".__crash"]:
-        if must_not_be in existing_files:
-            info["nstarted"] += 1
-            return
+    if any(marker in existing_files for marker in _RUN_MARKERS):
+        return "already_started"
 
-    info["nlocks"] += 1
+    journal_line = f"{prefix:s} Locked and sealed {run_path}.\n"
     if opts.do:
-        if lock_file(os.path.join(run_path, ".__lock"), opts.session_id):
-            with open(os.path.join(run_path, ".__seal"), "w") as hndlr:
-                hndlr.write(f"{opts.session_id}\n")
-            lines.append(f"{prefix:s} Locked and sealed {run_path}.\n")
-        else:
-            info["nlocks"] -= 1
-            info["nraced"] += 1
-
-    if opts.verbose and opts.verbose > 0:
-        for line in lines:
-            print(line, end="")
-    if opts.do:
+        if not lock_file(os.path.join(run_path, ".__lock"), opts.session_id):
+            return "raced"
+        with open(os.path.join(run_path, ".__seal"), "w") as hndlr:
+            hndlr.write(f"{opts.session_id}\n")
         with open(os.path.join(run_path, ".__journal"), "a") as j_hndlr:
-            j_hndlr.writelines(lines)
+            j_hndlr.write(journal_line)
+    if opts.verbose and opts.verbose > 0:
+        print(journal_line, end="")
+    return "locked"
 
 
 def change_experiment_lock_status(opts, unlock=False):
@@ -89,13 +87,12 @@ def change_experiment_lock_status(opts, unlock=False):
     FILTERS allows for selecting experiments based on their configuration.
     For example experiments containing the configuration `a.b=c` can be targeted.
     """
-    info = defaultdict(int)
-
     experiment_path = opts.experiment_path
     filters = opts.filters
 
     timestamp = f"{datetime.now():{opts.timestamp_fmt:s}}"
     prefix = f"[{timestamp:s}][{opts.session_id}]"
+    counts: dict[str, int] = {}
     with os.scandir(experiment_path) as fit:
         for entry in fit:
             if entry.name.startswith(".") or not entry.is_dir():
@@ -115,20 +112,28 @@ def change_experiment_lock_status(opts, unlock=False):
 
                         run_id = int(entry2.name)
                         if target_experiment and run_id in opts.runs:
-                            if unlock:
-                                unlock_run(entry2.path, info, prefix, opts)
-                            else:
-                                lock_run(entry2.path, info, prefix, opts)
+                            status = (
+                                unlock_run(entry2.path, prefix, opts)
+                                if unlock
+                                else lock_run(entry2.path, prefix, opts)
+                            )
+                            counts[status] = counts.get(status, 0) + 1
                     except ValueError:
                         pass
+
+    nlocks = counts.get("locked" if not unlock else "unlocked", 0)
+    nstarted = counts.get("already_started", 0)
+    nraced = counts.get("raced", 0)
+    nstrange = counts.get("strange", 0)
+
     if unlock:
-        print(f"{info['nlocks']:d} .__lock files deleted")
-        print(f"{info['nstrange']:d} strange folders")
+        print(f"{nlocks:d} .__lock files deleted")
+        print(f"{nstrange:d} strange folders")
     else:
-        print(f"{info['nlocks']:d} .__lock files added")
-        print(f"{info['nraced']:d} times just lost the .__lock to some other process")
-        print(f"{info['nstarted']:d} runs were already started")
-        print(f"{info['nstrange']:d} strange folders")
+        print(f"{nlocks:d} .__lock files added")
+        print(f"{nraced:d} times just lost the .__lock to some other process")
+        print(f"{nstarted:d} runs were already started")
+        print(f"{nstrange:d} strange folders")
 
     if not opts.do:
         print(

@@ -259,8 +259,12 @@ class OptionParser:
             "--sync",
             action="store_true",
             dest="sync",
-            help="Lock stale runs when used with --append-to.",
+            help=(
+                "Lock stale runs and unlock re-validated runs when used "
+                "with --append-to."
+            ),
         )
+
     def _add_timestamp_fmt(self) -> None:
         default_value = self.liftoff_config.get("timestamp_fmt")
         if default_value is None:
