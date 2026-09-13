@@ -144,6 +144,20 @@ def experiment_status(experiment_path):
     return info
 
 
+def _experiment_timestamp(experiment_path: str, timestamp_fmt: str) -> datetime.datetime:
+    """Parse the creation timestamp from an experiment dir name.
+
+    Names are '{timestamp}_{name}'; the timestamp chunk is the text
+    before the first '_'. Unparseable names sort oldest, i.e. land at
+    the bottom of a newest-first listing, instead of being dropped.
+    """
+    stamp = os.path.basename(experiment_path).split("_", 1)[0]
+    try:
+        return datetime.datetime.strptime(stamp, timestamp_fmt)
+    except ValueError:
+        return datetime.datetime.min
+
+
 def display_experiments(experiments_info: list[dict]):
     """Here we nicely display the experiments."""
     print(tabulate(experiments_info, headers="keys"))
@@ -158,9 +172,12 @@ def status() -> None:
         opts.timestamp_fmt,
         latest=(not opts.all),
     )
-    display_experiments(
-        sorted(
-            [experiment_status(p) for p in experiment_paths],
-            key=lambda info: info["Experiment"],
-        )
+    rows = [(p, experiment_status(p)) for p in experiment_paths]
+    rows.sort(
+        key=lambda row: (
+            _experiment_timestamp(row[0], opts.timestamp_fmt),
+            row[1]["Experiment"],
+        ),
+        reverse=True,
     )
+    display_experiments([info for _, info in rows])
